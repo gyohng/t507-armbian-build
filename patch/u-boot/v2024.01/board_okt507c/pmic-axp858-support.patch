@@ -1,0 +1,709 @@
+From e234812e6b7587f6808053b4f02c8ec8a7d1ec22 Mon Sep 17 00:00:00 2001
+From: George Yohng <george.yohng@mailinator.com>
+Date: Thu, 22 Feb 2024 23:00:56 +0800
+Subject: [PATCH] Support for AXP858 PMIC for Allwinner
+
+Signed-off-by: George Yohng <george.yohng@mailinator.com>
+---
+ arch/arm/mach-sunxi/pmic_bus.c |   3 +
+ board/sunxi/board.c            |  42 +++++
+ drivers/power/Kconfig          |   9 +
+ drivers/power/Makefile         |   1 +
+ drivers/power/pmic/axp.c       |   1 +
+ drivers/power/pmu_axp858.c     | 332 +++++++++++++++++++++++++++++++++
+ include/axp_pmic.h             |   1 +
+ include/pmu_axp.h              | 116 ++++++++++++
+ include/pmu_axp858.h           |  82 ++++++++
+ 9 files changed, 587 insertions(+)
+ create mode 100644 drivers/power/pmu_axp858.c
+ create mode 100644 include/pmu_axp.h
+ create mode 100644 include/pmu_axp858.h
+
+diff --git a/arch/arm/mach-sunxi/pmic_bus.c b/arch/arm/mach-sunxi/pmic_bus.c
+index 87df31272..e79c35e7e 100644
+--- a/arch/arm/mach-sunxi/pmic_bus.c
++++ b/arch/arm/mach-sunxi/pmic_bus.c
+@@ -22,6 +22,7 @@
+ 
+ #define AXP305_I2C_ADDR			0x36
+ #define AXP313_I2C_ADDR			0x36
++#define AXP858_I2C_ADDR			0x36
+ 
+ #define AXP221_CHIP_ADDR		0x68
+ 
+@@ -36,6 +37,8 @@ static int pmic_i2c_address(void)
+ 		return AXP305_I2C_ADDR;
+ 	if (IS_ENABLED(CONFIG_AXP313_POWER))
+ 		return AXP313_I2C_ADDR;
++	if (IS_ENABLED(CONFIG_AXP858_POWER))
++		return AXP858_I2C_ADDR;
+ 
+ 	/* Other AXP2xx and AXP8xx variants */
+ 	return AXP209_I2C_ADDR;
+diff --git a/board/sunxi/board.c b/board/sunxi/board.c
+index c4acb9e76..af8dcf679 100644
+--- a/board/sunxi/board.c
++++ b/board/sunxi/board.c
+@@ -549,6 +549,10 @@ int mmc_get_env_dev(void)
+ 
+ #ifdef CONFIG_SPL_BUILD
+ 
++#ifdef CONFIG_AXP858_POWER
++#include <pmu_axp858.h>
++#endif
++
+ static void sunxi_spl_store_dram_size(phys_addr_t dram_size)
+ {
+ 	struct boot_file_head *spl = get_spl_header(SPL_DT_HEADER_VERSION);
+@@ -581,6 +585,44 @@ void sunxi_board_init(void)
+ 	power_failed = sy8106a_set_vout1(CONFIG_SY8106A_VOUT1_VOLT);
+ #endif
+ 
++#if defined CONFIG_AXP858_POWER
++	power_failed = pmu_axp858_probe();
++	if (!power_failed) {
++		printf("Setting AXP858...\n");
++		#define dpmu_axp858_set_voltage(a,b,c) printf("%s = %d, %d   result=%d\n", a,b,c, pmu_axp858_set_voltage(a,b,c))
++
++		dpmu_axp858_set_voltage("dcdc1", 3300, 1);
++		dpmu_axp858_set_voltage("dcdc2", 1150, 1);
++		dpmu_axp858_set_voltage("dcdc3",  960, 1);
++		dpmu_axp858_set_voltage("dcdc4",  960, 1);
++		dpmu_axp858_set_voltage("dcdc5", 1500, 1);
++		dpmu_axp858_set_voltage("dcdc6",  700, 0);
++
++		dpmu_axp858_set_voltage("aldo1", 1800, 1);
++		dpmu_axp858_set_voltage("aldo2", 1800, 1);
++		dpmu_axp858_set_voltage("aldo3", 2500, 0);
++		dpmu_axp858_set_voltage("aldo4", 1800, 1);
++		dpmu_axp858_set_voltage("aldo5", 3300, 1);
++
++		dpmu_axp858_set_voltage("bldo1", 1800, 1);
++		dpmu_axp858_set_voltage("bldo2", 3300, 0);
++		dpmu_axp858_set_voltage("bldo3", 3300, 0);
++		dpmu_axp858_set_voltage("bldo4", 1200, 0);
++		dpmu_axp858_set_voltage("bldo5", 1200, 0);
++
++		dpmu_axp858_set_voltage("cldo1", 3300, 0);
++		dpmu_axp858_set_voltage("cldo2", 3300, 1);
++		dpmu_axp858_set_voltage("cldo3", 3300, 1);
++		dpmu_axp858_set_voltage("cldo4", 1800, 0);
++
++		dpmu_axp858_set_voltage("cpusldo", 700, 0);
++		dpmu_axp858_set_voltage("dc1sw",  3300, 1);
++
++		udelay(100000);
++		
++	}
++#endif
++
+ #if defined CONFIG_AXP152_POWER || defined CONFIG_AXP209_POWER || \
+ 	defined CONFIG_AXP221_POWER || defined CONFIG_AXP305_POWER || \
+ 	defined CONFIG_AXP809_POWER || defined CONFIG_AXP818_POWER || \
+diff --git a/drivers/power/Kconfig b/drivers/power/Kconfig
+index 33b8bc121..01b5598d4 100644
+--- a/drivers/power/Kconfig
++++ b/drivers/power/Kconfig
+@@ -126,6 +126,15 @@ config AXP818_POWER
+ 	Say y here to enable support for the axp818 pmic found on
+ 	A83T dev board.
+ 
++config AXP858_POWER
++	bool "axp858 pmic support"
++	depends on MACH_SUN50I_H616
++	select AXP_PMIC_BUS
++	select CMD_POWEROFF
++	---help---
++	Select this to enable support for the axp305 pmic found on most
++	H616 boards.
++
+ config SY8106A_POWER
+ 	bool "SY8106A pmic support"
+ 	depends on MACH_SUNXI_H3_H5
+diff --git a/drivers/power/Makefile b/drivers/power/Makefile
+index c7ee4595f..c848cba87 100644
+--- a/drivers/power/Makefile
++++ b/drivers/power/Makefile
+@@ -15,6 +15,7 @@ obj-$(CONFIG_AXP305_POWER)	+= axp305.o
+ obj-$(CONFIG_AXP313_POWER)	+= axp313.o
+ obj-$(CONFIG_AXP809_POWER)	+= axp809.o
+ obj-$(CONFIG_AXP818_POWER)	+= axp818.o
++obj-$(CONFIG_AXP858_POWER)	+= pmu_axp858.o
+ obj-$(CONFIG_EXYNOS_TMU)	+= exynos-tmu.o
+ obj-$(CONFIG_SY8106A_POWER)	+= sy8106a.o
+ obj-$(CONFIG_TPS6586X_POWER)	+= tps6586x.o
+diff --git a/drivers/power/pmic/axp.c b/drivers/power/pmic/axp.c
+index 0e1e45fba..e7a1126b7 100644
+--- a/drivers/power/pmic/axp.c
++++ b/drivers/power/pmic/axp.c
+@@ -92,6 +92,7 @@ static const struct udevice_id axp_pmic_ids[] = {
+ 	{ .compatible = "x-powers,axp806", .data = AXP806_ID },
+ 	{ .compatible = "x-powers,axp809", .data = AXP809_ID },
+ 	{ .compatible = "x-powers,axp813", .data = AXP813_ID },
++	{ .compatible = "x-powers,axp858", .data = AXP858_ID },
+ 	{ }
+ };
+ 
+diff --git a/drivers/power/pmu_axp858.c b/drivers/power/pmu_axp858.c
+new file mode 100644
+index 000000000..a0267212d
+--- /dev/null
++++ b/drivers/power/pmu_axp858.c
+@@ -0,0 +1,332 @@
++/*
++ * Copyright (C) 2019 Allwinner.
++ * weidonghui <weidonghui@allwinnertech.com>
++ *
++ * SUNXI AXP858  Driver
++ *
++ * SPDX-License-Identifier: GPL-2.0+
++ */
++
++#include <common.h>
++#include <pmu_axp858.h>
++#include <pmu_axp.h>
++#include <asm/arch/pmic_bus.h>
++
++/*#include <power/sunxi/pmu.h>*/
++
++#define tick_printf printf
++
++#ifdef PMU_DEBUG
++#define axp_info(fmt...) tick_printf("[axp][info]: " fmt)
++#define axp_err(fmt...) tick_printf("[axp][err]: " fmt)
++#else
++#define axp_info(fmt...)
++#define axp_err(fmt...) tick_printf("[axp][err]: " fmt)
++#endif
++
++#define pmic_bus_read(a,b,c) pmic_bus_read(b,c)
++#define pmic_bus_write(a,b,c) pmic_bus_write(b,c)
++#define pmic_bus_init(x,y) pmic_bus_init()
++
++typedef struct _axp_contrl_info {
++	char name[16];
++
++	u32 min_vol;
++	u32 max_vol;
++	u32 cfg_reg_addr;
++	u32 cfg_reg_mask;
++
++	u32 step0_val;
++	u32 split1_val;
++	u32 step1_val;
++	u32 ctrl_reg_addr;
++
++	u32 ctrl_bit_ofs;
++} axp_contrl_info;
++
++__attribute__((section(".data"))) axp_contrl_info pmu_axp858_ctrl_tbl[] = {
++	/*name,    min,  max, reg,  mask, step0,split1_val, step1,ctrl_reg,ctrl_bit */
++	{ "dcdc1", 1500, 3400, 0x13, 0x1f, 100, 0, 0, PMU_ONOFF_CTL1, 0 },
++	{ "dcdc2", 500, 1540, 0x14, 0x7f, 10, 1200, 20, PMU_ONOFF_CTL1, 1 },
++	{ "dcdc3", 500, 1540, 0x15, 0x7f, 10, 1200, 20, PMU_ONOFF_CTL1, 2 },
++	{ "dcdc4", 500, 1540, 0x16, 0x7f, 10, 1200, 20, PMU_ONOFF_CTL1, 3 },
++	{ "dcdc5", 800, 1840, 0x17, 0x7f, 10, 1120, 20, PMU_ONOFF_CTL1, 4 },
++	{ "dcdc6", 500, 3400, 0x18, 0x1f, 100, 0, 0, PMU_ONOFF_CTL1, 5 },
++
++	{ "aldo1", 700, 3300, 0x19, 0x1f, 100, 0, 0, PMU_ONOFF_CTL2, 0 },
++	{ "aldo2", 700, 3300, 0x20, 0x1f, 100, 0, 0, PMU_ONOFF_CTL2, 1 },
++	{ "aldo3", 700, 3300, 0x21, 0x1f, 100, 0, 0, PMU_ONOFF_CTL2, 2 },
++	{ "aldo4", 700, 3300, 0x22, 0x1f, 100, 0, 0, PMU_ONOFF_CTL2, 3 },
++	{ "aldo5", 700, 3300, 0x23, 0x1f, 100, 0, 0, PMU_ONOFF_CTL2, 4 },
++
++	{ "bldo1", 700, 3300, 0x24, 0x1f, 100, 0, 0, PMU_ONOFF_CTL2, 5 },
++	{ "bldo2", 700, 3300, 0x25, 0x1f, 100, 0, 0, PMU_ONOFF_CTL2, 6 },
++	{ "bldo3", 700, 3300, 0x26, 0x1f, 100, 0, 0, PMU_ONOFF_CTL2, 7 },
++	{ "bldo4", 700, 3300, 0x27, 0x1f, 100, 0, 0, PMU_ONOFF_CTL3, 0 },
++	{ "bldo5", 700, 3300, 0x28, 0x1f, 100, 0, 0, PMU_ONOFF_CTL3, 1 },
++
++	{ "cldo1", 700, 3300, 0x29, 0x1f, 100, 0, 0, PMU_ONOFF_CTL3, 2 },
++	{ "cldo2", 700, 3300, 0x2a, 0x1f, 100, 0, 0, PMU_ONOFF_CTL3, 3 },
++	{ "cldo3", 700, 3300, 0x2b, 0x1f, 100, 0, 0, PMU_ONOFF_CTL3, 4 },
++	{ "cldo4", 700, 4200, 0x2d, 0x3f, 100, 0, 0, PMU_ONOFF_CTL3, 5 },
++
++	{ "cpusldo", 700, 1400, 0x2e, 0x0f, 50, 0, 0, PMU_ONOFF_CTL3, 6 },
++	{ "dc1sw", 1500, 3400, 0x13, 0x1f, 100, 0, 0, PMU_ONOFF_CTL3, 7 },
++};
++
++static axp_contrl_info *get_ctrl_info_from_tbl(const char *name)
++{
++	int i    = 0;
++	int size = ARRAY_SIZE(pmu_axp858_ctrl_tbl);
++	axp_contrl_info *p;
++
++	for (i = 0; i < size; i++) {
++		if (!strncmp(name, pmu_axp858_ctrl_tbl[i].name,
++			     strlen(pmu_axp858_ctrl_tbl[i].name))) {
++			break;
++		}
++	}
++	if (i >= size) {
++		axp_err("can't find %s from table\n", name);
++		return NULL;
++	}
++	p = pmu_axp858_ctrl_tbl + i;
++	return p;
++}
++
++int pmu_axp858_ap_reset_enable(void)
++{
++	u8 reg_value;
++
++	if (pmic_bus_read(AXP858_RUNTIME_ADDR, PMU_POWER_DISABLE_DOWN,
++			  &reg_value))
++		return -1;
++
++	reg_value |= 1 << 4;
++	if (pmic_bus_write(AXP858_RUNTIME_ADDR, PMU_POWER_DISABLE_DOWN,
++			   reg_value))
++		return -1;
++
++	return 0;
++}
++
++int pmu_axp858_probe(void)
++{
++	u8 pmu_chip_id;
++	if (pmic_bus_init(AXP858_DEVICE_ADDR, AXP858_RUNTIME_ADDR)) {
++		tick_printf("%s pmic_bus_init fail\n", __func__);
++		return -1;
++	}
++	if (pmic_bus_read(AXP858_RUNTIME_ADDR, AXP858_CHIP_ID, &pmu_chip_id)) {
++		tick_printf("%s pmic_bus_read fail\n", __func__);
++		return -1;
++	}
++	pmu_chip_id &= 0XCF;
++	if (pmu_chip_id == 0x44) {
++		/*pmu type AXP858*/
++		pmu_axp858_ap_reset_enable();
++		tick_printf("PMU: AXP858\n");
++		return 0;
++	}
++	return -1;
++}
++
++int pmu_axp858_set_voltage(const char *name, uint set_vol, uint onoff)
++{
++	u8 reg_value;
++	axp_contrl_info *p_item = NULL;
++	u8 base_step;
++
++	p_item = get_ctrl_info_from_tbl(name);
++	if (!p_item) {
++		return -1;
++	}
++
++	axp_info(
++		"name %s, min_vol %dmv, max_vol %d, cfg_reg 0x%x, cfg_mask 0x%x \
++		step0_val %d, split1_val %d, step1_val %d, ctrl_reg_addr 0x%x, ctrl_bit_ofs %d\n",
++		p_item->name, p_item->min_vol, p_item->max_vol,
++		p_item->cfg_reg_addr, p_item->cfg_reg_mask, p_item->step0_val,
++		p_item->split1_val, p_item->step1_val, p_item->ctrl_reg_addr,
++		p_item->ctrl_bit_ofs);
++
++	if (set_vol > 0) {
++		if (set_vol < p_item->min_vol) {
++			set_vol = p_item->min_vol;
++		} else if (set_vol > p_item->max_vol) {
++			set_vol = p_item->max_vol;
++		}
++		if (pmic_bus_read(AXP858_RUNTIME_ADDR, p_item->cfg_reg_addr,
++				  &reg_value)) {
++			return -1;
++		}
++
++		reg_value &= ~p_item->cfg_reg_mask;
++		if (p_item->split1_val && (set_vol > p_item->split1_val)) {
++			if (p_item->split1_val < p_item->min_vol) {
++				axp_err("bad split val(%d) for %s\n",
++					p_item->split1_val, name);
++			}
++
++			base_step = (p_item->split1_val - p_item->min_vol) /
++				    p_item->step0_val;
++			reg_value |= (base_step +
++				      (set_vol - p_item->split1_val) /
++					      p_item->step1_val);
++		} else {
++			reg_value |=
++				(set_vol - p_item->min_vol) / p_item->step0_val;
++		}
++
++		if (pmic_bus_write(AXP858_RUNTIME_ADDR, p_item->cfg_reg_addr,
++				   reg_value)) {
++			axp_err("unable to set %s\n", name);
++			return -1;
++		}
++	}
++
++	if (onoff < 0) {
++		return 0;
++	}
++	if (pmic_bus_read(AXP858_RUNTIME_ADDR, p_item->ctrl_reg_addr,
++			  &reg_value)) {
++		return -1;
++	}
++	if (onoff == 0) {
++		reg_value &= ~(1 << p_item->ctrl_bit_ofs);
++	} else {
++		reg_value |= (1 << p_item->ctrl_bit_ofs);
++	}
++	if (pmic_bus_write(AXP858_RUNTIME_ADDR, p_item->ctrl_reg_addr,
++			   reg_value)) {
++		axp_err("unable to onoff %s\n", name);
++		return -1;
++	}
++	return 0;
++}
++
++int pmu_axp858_get_voltage(const char *name)
++{
++	u8 reg_value;
++	axp_contrl_info *p_item = NULL;
++	u8 base_step;
++	int vol;
++
++	p_item = get_ctrl_info_from_tbl(name);
++	if (!p_item) {
++		return -1;
++	}
++
++	if (pmic_bus_read(AXP858_RUNTIME_ADDR, p_item->ctrl_reg_addr,
++			  &reg_value)) {
++		return -1;
++	}
++	if (!(reg_value & (0x01 << p_item->ctrl_bit_ofs))) {
++		return 0;
++	}
++
++	if (pmic_bus_read(AXP858_RUNTIME_ADDR, p_item->cfg_reg_addr,
++			  &reg_value)) {
++		return -1;
++	}
++	reg_value &= p_item->cfg_reg_mask;
++	if (p_item->split1_val) {
++		base_step = (p_item->split1_val - p_item->min_vol) /
++			    p_item->step0_val;
++		if (reg_value > base_step) {
++			vol = p_item->split1_val +
++			      p_item->step1_val * (reg_value - base_step);
++		} else {
++			vol = p_item->min_vol + p_item->step0_val * reg_value;
++		}
++	} else {
++		vol = p_item->min_vol + p_item->step0_val * reg_value;
++	}
++	return vol;
++}
++
++int pmu_axp858_set_power_off(void)
++{
++	u8 reg_value;
++	if (pmic_bus_read(AXP858_RUNTIME_ADDR, PMU_POWER_DISABLE_DOWN,
++			  &reg_value)) {
++		return -1;
++	}
++	reg_value |= 1 << 7;
++	if (pmic_bus_write(AXP858_RUNTIME_ADDR, PMU_POWER_DISABLE_DOWN,
++			   reg_value)) {
++		return -1;
++	}
++	return 0;
++}
++
++int pmu_axp858_set_sys_mode(int status)
++{
++	if (pmic_bus_write(AXP858_RUNTIME_ADDR, PMU_DATA_BUFFER0, (u8)status)) {
++		return -1;
++	}
++	return 0;
++}
++
++int pmu_axp858_get_sys_mode(void)
++{
++	u8 reg_value;
++	if (pmic_bus_read(AXP858_RUNTIME_ADDR, PMU_DATA_BUFFER0, &reg_value)) {
++		return -1;
++	}
++	return reg_value;
++}
++
++int pmu_axp858_get_key_irq(void)
++{
++	u8 reg_value;
++	if (pmic_bus_read(AXP858_RUNTIME_ADDR, PMU_IRQ_STATU2, &reg_value)) {
++		return -1;
++	}
++	reg_value &= (0x03);
++	if (reg_value) {
++		if (pmic_bus_write(AXP858_RUNTIME_ADDR, PMU_IRQ_STATU2,
++				   reg_value)) {
++			return -1;
++		}
++	}
++	return (reg_value)&3;
++}
++
++unsigned char pmu_axp858_get_reg_value(unsigned char reg_addr)
++{
++	u8 reg_value;
++	if (pmic_bus_read(AXP858_RUNTIME_ADDR, reg_addr, &reg_value)) {
++		return -1;
++	}
++	return reg_value;
++}
++
++unsigned char pmu_axp858_set_reg_value(unsigned char reg_addr, unsigned char reg_value)
++{
++	unsigned char reg;
++	if (pmic_bus_write(AXP858_RUNTIME_ADDR, reg_addr, reg_value)) {
++		return -1;
++	}
++	if (pmic_bus_read(AXP858_RUNTIME_ADDR, reg_addr, &reg)) {
++		return -1;
++	}
++	return reg;
++}
++
++#if 0
++U_BOOT_AXP_PMU_INIT(pmu_axp858) = {
++	.pmu_name      = "pmu_axp858",
++	.probe	 = pmu_axp858_probe,
++	.set_voltage   = pmu_axp858_set_voltage,
++	.get_voltage   = pmu_axp858_get_voltage,
++	.set_power_off = pmu_axp858_set_power_off,
++	.set_sys_mode  = pmu_axp858_set_sys_mode,
++	.get_sys_mode  = pmu_axp858_get_sys_mode,
++	.get_key_irq   = pmu_axp858_get_key_irq,
++	/*.set_bus_vol_limit	= pmu_axp858_set_bus_vol_limit, */
++	.get_reg_value = pmu_axp858_get_reg_value,
++	.set_reg_value = pmu_axp858_set_reg_value,
++
++};
++#endif
+diff --git a/include/axp_pmic.h b/include/axp_pmic.h
+index aabafc850..feb5372b8 100644
+--- a/include/axp_pmic.h
++++ b/include/axp_pmic.h
+@@ -37,6 +37,7 @@ enum {
+ 	AXP806_ID,
+ 	AXP809_ID,
+ 	AXP813_ID,
++	AXP858_ID,
+ };
+ 
+ int axp_set_dcdc1(unsigned int mvolt);
+diff --git a/include/pmu_axp.h b/include/pmu_axp.h
+new file mode 100644
+index 000000000..b81c4aaf6
+--- /dev/null
++++ b/include/pmu_axp.h
+@@ -0,0 +1,116 @@
++/*
++ * Copyright (C) 2019 Allwinner.
++ * weidonghui <weidonghui@allwinnertech.com>
++ *
++ * SUNXI AXP  Driver
++ *
++ * SPDX-License-Identifier: GPL-2.0+
++ */
++
++#ifndef __PMU_AXP_H__
++#define __PMU_AXP_H__
++
++#include <common.h>
++#include <linker_lists.h>
++
++#define AXP_POWER_ON_BY_POWER_KEY 0
++#define AXP_POWER_ON_BY_POWER_TRIGGER 1
++
++#define SUNXI_AXP_DEV_MAX (2)
++
++#define AXP_VBUS_EXIST (2)
++#define AXP_DCIN_EXIST (3)
++#define AXP_VBUS_DCIN_NOT_EXIST (4)
++#define BATTERY_EXIST (0X20)
++
++#define POWER_KEY_EXIST 1
++#define POWER_KEY_NOTEXIST 0
++
++#define BATTERY_RATIO_DEFAULT 0
++#define BATTERY_RATIO_TOO_LOW_WITHOUT_DCIN 1
++#define BATTERY_RATIO_TOO_LOW_WITH_DCIN 2
++#define BATTERY_RATIO_ENOUGH 3
++#define BATTERY_VOL_TOO_LOW 4
++
++#define AXP_POWER_ON_BY_POWER_KEY 0
++#define AXP_POWER_ON_BY_POWER_TRIGGER 1
++
++enum sunxi_axp_type {
++	AXP_TYPE_MAIN = 0,
++	AXP_TYPE_SLAVE,
++};
++
++struct sunxi_pmu_dev_t {
++const char *pmu_name;
++int (*probe)(void); /* matches chipid*/
++int (*set_voltage)(char *name, uint vol_value, uint onoff); /*Set a certain power, voltage value. */
++int (*get_voltage)(char *name); /*Read a certain power, voltage value */
++int (*set_power_off)(void); /*Set shutdown*/
++int (*set_sys_mode)(int status); /*Sets the state of the next mode */
++int (*get_sys_mode)(void); /*Get the current state*/
++int (*get_key_irq)(void); /*Get the button length interrupt*/
++int (*set_bus_vol_limit)(int vol_value); /*Set limit total voltage*/
++unsigned char (*get_reg_value)(unsigned char reg_addr);/*get register value*/
++unsigned char (*set_reg_value)(unsigned char reg_addr, unsigned char reg_value);/*set register value*/
++};
++
++
++
++#define U_BOOT_AXP_PMU_INIT(_name)                                             \
++	ll_entry_declare(struct sunxi_pmu_dev_t, _name, pmu)
++
++struct sunxi_bmu_dev_t {
++const char *bmu_name;
++int (*probe)(void); /* matches chipid*/
++int (*set_power_off)(void); /*Set shutdown*/
++int (*get_poweron_source)(void); /* Get the reason for triggering the boot, (button to power on, power on)*/
++int (*get_axp_bus_exist)(void); /*Get the current axp bus: DCIN&VBUS&BATTERY&NO exist */
++int (*set_coulombmeter_onoff)(int onoff); /*Set coulomb counter switch*/
++int (*get_battery_vol)(void); /*Get the average battery voltage*/
++int (*get_battery_capacity)(void); /*Get battery capacity*/
++int (*get_battery_probe)(void); /*Get the battery presence flag*/
++int (*set_vbus_current_limit)(int current); /*limit total current*/
++int (*get_vbus_current_limit)(void); /*Get current limit current*/
++int (*set_charge_current_limit)(int current); /*Set the current charge size*/
++unsigned char (*get_reg_value)(unsigned char reg_addr);/*get register value*/
++unsigned char (*set_reg_value)(unsigned char reg_addr, unsigned char reg_value);/*set register value*/
++};
++
++#define U_BOOT_AXP_BMU_INIT(_name)                                             \
++	ll_entry_declare(struct sunxi_bmu_dev_t, _name, bmu)
++
++#define AXP_BOOT_SOURCE_BUTTON         0
++#define AXP_BOOT_SOURCE_IRQ_LOW                1
++#define AXP_BOOT_SOURCE_VBUS_USB       2
++#define AXP_BOOT_SOURCE_CHARGER                3
++#define AXP_BOOT_SOURCE_BATTERY                4
++
++
++int pmu_probe(void);
++int pmu_set_voltage(char *name, uint vol_value, uint onoff);
++int pmu_get_voltage(char *name);
++int pmu_set_power_off(void);
++int pmu_set_sys_mode(int status);
++int pmu_get_sys_mode(void);
++int pmu_get_key_irq(void);
++int pmu_set_bus_vol_limit(int vol_value);
++unsigned char pmu_get_reg_value(unsigned char reg_addr);
++unsigned char pmu_set_reg_value(unsigned char reg_addr, unsigned char reg_value);
++
++int bmu_probe(void);
++int bmu_set_power_off(void);
++int bmu_get_poweron_source(void);
++int bmu_get_axp_bus_exist(void);
++int bmu_set_coulombmeter_onoff(int onoff);
++int bmu_get_battery_vol(void);
++int bmu_get_battery_capacity(void);
++int bmu_get_battery_probe(void);
++int bmu_set_vbus_current_limit(int current);
++int bmu_get_vbus_current_limit(void);
++int bmu_set_charge_current_limit(int current);
++unsigned char bmu_get_reg_value(unsigned char reg_addr);
++unsigned char bmu_set_reg_value(unsigned char reg_addr, unsigned char reg_value);
++
++int axp_probe(void);
++
++#endif /* __PMU_AXP_H__ */
+diff --git a/include/pmu_axp858.h b/include/pmu_axp858.h
+new file mode 100644
+index 000000000..0073866c2
+--- /dev/null
++++ b/include/pmu_axp858.h
+@@ -0,0 +1,82 @@
++/*
++ * Copyright (C) 2016 Allwinner.
++ * wangwei <wangwei@allwinnertech.com>
++ *
++ * SUNXI AXP858  Driver
++ *
++ * SPDX-License-Identifier: GPL-2.0+
++ */
++
++#ifndef __AXP858_H__
++#define __AXP858_H__
++
++//PMIC chip id reg03:bit7-6  bit3-0
++#define   AXP858_ADDR              (0x14)
++
++#define AXP858_DEVICE_ADDR			(0x745)
++
++#ifndef CONFIG_SYS_SUNXI_R_I2C0_SLAVE
++#define AXP858_RUNTIME_ADDR                     (0x2d)
++#else
++#ifndef CONFIG_AXP858_SUNXI_I2C_SLAVE
++#define AXP858_RUNTIME_ADDR                    CONFIG_SYS_SUNXI_R_I2C0_SLAVE
++#else
++#define AXP858_RUNTIME_ADDR                    CONFIG_AXP858_SUNXI_I2C_SLAVE
++#endif
++#endif
++
++/*define AXP858 REGISTER*/
++#define   PMU_POWER_ON_SOURCE               (0x00)
++#define   PMU_POWER_OFF_SOURCE              (0x01)
++#define   AXP858_CHIP_ID                       (0x03)
++#define   PMU_DATA_BUFFER0                  (0x04)
++#define   PMU_DATA_BUFFER1                  (0x05)
++#define   PMU_DATA_BUFFER2                  (0x06)
++#define   PMU_DATA_BUFFER3                  (0x07)
++
++#define   PMU_ONOFF_CTL1                    (0x10)
++#define   PMU_ONOFF_CTL2                    (0x11)
++#define   PMU_ONOFF_CTL3                    (0x12)
++
++#define   PMU_DC1OUT_VOL                    (0x13)
++#define   PMU_DC2OUT_VOL                    (0x14)
++#define   PMU_DC3OUT_VOL                    (0x15)
++#define   PMU_DC4OUT_VOL                    (0x16)
++#define   PMU_DC5OUT_VOL                    (0x17)
++#define   PMU_DC6OUT_VOL                    (0x18)
++
++#define   PMU_ALDO1_VOL                     (0x19)
++#define   PMU_ALDO2_VOL                     (0x20)
++#define   PMU_ALDO3_VOL                     (0x21)
++#define   PMU_ALDO4_VOL                     (0x22)
++#define   PMU_ALDO5_VOL                     (0x23)
++
++#define   PMU_BLDO1_VOL                     (0x24)
++#define   PMU_BLDO2_VOL                     (0x25)
++#define   PMU_BLDO3_VOL                     (0x26)
++#define   PMU_BLDO4_VOL                     (0x27)
++#define   PMU_BLDO5_VOL                     (0x28)
++
++#define   PMU_CLDO1_VOL                     (0x29)
++#define   PMU_CLDO2_VOL                     (0x2A)
++#define   PMU_CLDO3_GPIO1_VOL               (0x2B)
++#define   PMU_CLDO4_GPIO2_CTL               (0x2C)
++#define   PMU_CLDO4_VOL                     (0x2C)
++
++#define   PMU_POWER_DISABLE_DOWN            (0x32)
++
++#define   PMU_IRQ_STATU1                    (0x48)
++#define   PMU_IRQ_STATU2                    (0x49)
++
++int pmu_axp858_ap_reset_enable(void);
++int pmu_axp858_probe(void);
++int pmu_axp858_set_voltage(const char *name, uint set_vol, uint onoff);
++int pmu_axp858_get_voltage(const char *name);
++int pmu_axp858_set_power_off(void);
++int pmu_axp858_set_sys_mode(int status);
++int pmu_axp858_get_sys_mode(void);
++int pmu_axp858_get_key_irq(void);
++unsigned char pmu_axp858_get_reg_value(unsigned char reg_addr);
++unsigned char pmu_axp858_set_reg_value(unsigned char reg_addr, unsigned char reg_value);
++
++#endif /* __AXP858_REGS_H__ */
+-- 
+Created with Armbian build tools https://github.com/armbian/build
+

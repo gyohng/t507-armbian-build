@@ -1,0 +1,704 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: George Yohng <george.yohng@mailinator.com>
+Date: Mon, 26 Feb 2024 22:03:24 +0800
+Subject: AXP858 Regulator Support
+
+Signed-off-by: George Yohng <george.yohng@mailinator.com>
+---
+ drivers/mfd/axp20x-i2c.c             |   1 +
+ drivers/mfd/axp20x.c                 | 278 +++++++++-
+ drivers/regulator/axp20x-regulator.c |  70 +++
+ include/linux/mfd/axp20x.h           | 136 +++++
+ 4 files changed, 483 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/mfd/axp20x-i2c.c b/drivers/mfd/axp20x-i2c.c
+index 68d3560cf..237f1ed1b 100644
+--- a/drivers/mfd/axp20x-i2c.c
++++ b/drivers/mfd/axp20x-i2c.c
+@@ -65,10 +65,11 @@ static const struct of_device_id axp20x_i2c_of_match[] = {
+ 	{ .compatible = "x-powers,axp221", .data = (void *)AXP221_ID },
+ 	{ .compatible = "x-powers,axp223", .data = (void *)AXP223_ID },
+ 	{ .compatible = "x-powers,axp313a", .data = (void *)AXP313A_ID },
+ 	{ .compatible = "x-powers,axp803", .data = (void *)AXP803_ID },
+ 	{ .compatible = "x-powers,axp806", .data = (void *)AXP806_ID },
++	{ .compatible = "x-powers,axp858", .data = (void *)AXP858_ID },
+ 	{ .compatible = "x-powers,axp15060", .data = (void *)AXP15060_ID },
+ 	{ },
+ };
+ MODULE_DEVICE_TABLE(of, axp20x_i2c_of_match);
+ #endif
+diff --git a/drivers/mfd/axp20x.c b/drivers/mfd/axp20x.c
+index 118db04a5..f12468d76 100644
+--- a/drivers/mfd/axp20x.c
++++ b/drivers/mfd/axp20x.c
+@@ -43,10 +43,11 @@ static const char * const axp20x_model_names[] = {
+ 	"AXP313a",
+ 	"AXP803",
+ 	"AXP806",
+ 	"AXP809",
+ 	"AXP813",
++	"AXP858",
+ 	"AXP15060",
+ };
+ 
+ static const struct regmap_range axp152_writeable_ranges[] = {
+ 	regmap_reg_range(AXP152_LDO3456_DC1234_CTRL, AXP152_IRQ3_STATE),
+@@ -244,10 +245,29 @@ static const struct regmap_access_table axp15060_writeable_table = {
+ static const struct regmap_access_table axp15060_volatile_table = {
+ 	.yes_ranges	= axp15060_volatile_ranges,
+ 	.n_yes_ranges	= ARRAY_SIZE(axp15060_volatile_ranges),
+ };
+ 
++static const struct regmap_range axp858_writeable_ranges[] = {
++	regmap_reg_range(AXP858_ON_INDICATE, AXP858_FREQUENCY_ALDO2),
++};
++
++static const struct regmap_range axp858_volatile_ranges[] = {
++	regmap_reg_range(AXP858_ON_INDICATE, AXP858_FREQUENCY_ALDO2),
++};
++
++static const struct regmap_access_table axp858_writeable_table = {
++	.yes_ranges	= axp858_writeable_ranges,
++	.n_yes_ranges	= ARRAY_SIZE(axp858_writeable_ranges),
++};
++
++static const struct regmap_access_table axp858_volatile_table = {
++	.yes_ranges	= axp858_volatile_ranges,
++	.n_yes_ranges	= ARRAY_SIZE(axp858_volatile_ranges),
++};
++
++
+ static const struct resource axp152_pek_resources[] = {
+ 	DEFINE_RES_IRQ_NAMED(AXP152_IRQ_PEK_RIS_EDGE, "PEK_DBR"),
+ 	DEFINE_RES_IRQ_NAMED(AXP152_IRQ_PEK_FAL_EDGE, "PEK_DBF"),
+ };
+ 
+@@ -282,10 +302,15 @@ static const struct resource axp20x_battery_resources[] = {
+ static const struct resource axp20x_pek_resources[] = {
+ 	DEFINE_RES_IRQ_NAMED(AXP20X_IRQ_PEK_RIS_EDGE, "PEK_DBR"),
+ 	DEFINE_RES_IRQ_NAMED(AXP20X_IRQ_PEK_FAL_EDGE, "PEK_DBF"),
+ };
+ 
++static struct resource axp858_pek_resources[] = {
++	DEFINE_RES_IRQ_NAMED(AXP858_IRQ_POKNIRQ_EN, "PEK_DBF"),
++	DEFINE_RES_IRQ_NAMED(AXP858_IRQ_POKPIRQ_EN, "PEK_DBR"),
++};
++
+ static const struct resource axp20x_usb_power_supply_resources[] = {
+ 	DEFINE_RES_IRQ_NAMED(AXP20X_IRQ_VBUS_PLUGIN, "VBUS_PLUGIN"),
+ 	DEFINE_RES_IRQ_NAMED(AXP20X_IRQ_VBUS_REMOVAL, "VBUS_REMOVAL"),
+ 	DEFINE_RES_IRQ_NAMED(AXP20X_IRQ_VBUS_VALID, "VBUS_VALID"),
+ 	DEFINE_RES_IRQ_NAMED(AXP20X_IRQ_VBUS_NOT_VALID, "VBUS_NOT_VALID"),
+@@ -437,10 +462,19 @@ static const struct regmap_config axp15060_regmap_config = {
+ 	.volatile_table	= &axp15060_volatile_table,
+ 	.max_register	= AXP15060_IRQ2_STATE,
+ 	.cache_type	= REGCACHE_MAPLE,
+ };
+ 
++static const struct regmap_config axp858_regmap_config = {
++	.reg_bits	= 8,
++	.val_bits	= 8,
++	.wr_table	= &axp858_writeable_table,
++	.volatile_table	= &axp858_volatile_table,
++	.max_register	= AXP858_FREQUENCY_ALDO2,
++	.cache_type	= REGCACHE_RBTREE,
++};
++
+ #define INIT_REGMAP_IRQ(_variant, _irq, _off, _mask)			\
+ 	[_variant##_IRQ_##_irq] = { .reg_offset = (_off), .mask = BIT(_mask) }
+ 
+ static const struct regmap_irq axp152_regmap_irqs[] = {
+ 	INIT_REGMAP_IRQ(AXP152, LDO0IN_CONNECT,		0, 6),
+@@ -721,10 +755,29 @@ static const struct regmap_irq axp15060_regmap_irqs[] = {
+ 	INIT_REGMAP_IRQ(AXP15060, PEK_FAL_EDGE,			1, 3),
+ 	INIT_REGMAP_IRQ(AXP15060, PEK_RIS_EDGE,			1, 4),
+ 	INIT_REGMAP_IRQ(AXP15060, GPIO2_INPUT,		1, 5),
+ };
+ 
++static const struct regmap_irq axp858_regmap_irqs[] = {
++	INIT_REGMAP_IRQ(AXP858, DCDC3_CUR_OVER,		1, 7),
++	INIT_REGMAP_IRQ(AXP858, DCDC2_CUR_OVER,		1, 6),
++	INIT_REGMAP_IRQ(AXP858, GPIO2_EN,			1, 5),
++	INIT_REGMAP_IRQ(AXP858, POKPIRQ_EN,			1, 4),
++	INIT_REGMAP_IRQ(AXP858, POKNIRQ_EN,			1, 3),
++	INIT_REGMAP_IRQ(AXP858, GPIO1_EN,			1, 2),
++	INIT_REGMAP_IRQ(AXP858, POKSIRQ_EN,			1, 1),
++	INIT_REGMAP_IRQ(AXP858, POKLIRQ_EN,			1, 0),
++	INIT_REGMAP_IRQ(AXP858, DCDC6_UNDER,		0, 7),
++	INIT_REGMAP_IRQ(AXP858, DCDC5_UNDER,		0, 6),
++	INIT_REGMAP_IRQ(AXP858, DCDC4_UNDER,		0, 5),
++	INIT_REGMAP_IRQ(AXP858, DCDC3_UNDER,		0, 4),
++	INIT_REGMAP_IRQ(AXP858, DCDC2_UNDER,		0, 3),
++	INIT_REGMAP_IRQ(AXP858, DCDC1_UNDER,		0, 2),
++	INIT_REGMAP_IRQ(AXP858, TEMP_OVER2,			0, 1),
++	INIT_REGMAP_IRQ(AXP858, TEMP_OVER1,			0, 0),
++};
++
+ static const struct regmap_irq_chip axp152_regmap_irq_chip = {
+ 	.name			= "axp152_irq_chip",
+ 	.status_base		= AXP152_IRQ1_STATE,
+ 	.ack_base		= AXP152_IRQ1_STATE,
+ 	.unmask_base		= AXP152_IRQ1_EN,
+@@ -869,10 +922,22 @@ static const struct mfd_cell axp192_cells[] = {
+ 		.resources	= axp192_usb_power_supply_resources,
+ 	},
+ 	{	.name		= "axp20x-regulator" },
+ };
+ 
++static const struct regmap_irq_chip axp858_regmap_irq_chip = {
++	.name			= "axp858_irq_chip",
++	.status_base		= AXP858_IRQ_STS1,
++	.ack_base		= AXP858_IRQ_STS1,
++	.unmask_base		= AXP858_IRQ_EN1,
++	//.mask_invert		= true,
++	.init_ack_masked	= true,
++	.irqs			= axp858_regmap_irqs,
++	.num_irqs		= ARRAY_SIZE(axp858_regmap_irqs),
++	.num_regs		= 2,
++};
++
+ static const struct mfd_cell axp20x_cells[] = {
+ 	{
+ 		.name		= "axp20x-gpio",
+ 		.of_compatible	= "x-powers,axp209-gpio",
+ 	}, {
+@@ -1131,10 +1196,210 @@ static const struct mfd_cell axp813_cells[] = {
+ 		.name		= "axp20x-charger-led",
+ 		.of_compatible	= "x-powers,axp813-charger-led",
+ 	},
+ };
+ 
++#define AXP858_DCDC1 "dcdc1"
++#define AXP858_DCDC2 "dcdc2"
++#define AXP858_DCDC3 "dcdc3"
++#define AXP858_DCDC4 "dcdc4"
++#define AXP858_DCDC5 "dcdc5"
++#define AXP858_DCDC6 "dcdc6"
++#define AXP858_ALDO1 "aldo1"
++#define AXP858_ALDO2 "aldo2"
++#define AXP858_ALDO3 "aldo3"
++#define AXP858_ALDO4 "aldo4"
++#define AXP858_ALDO5 "aldo5"
++#define AXP858_BLDO1 "bldo1"
++#define AXP858_BLDO2 "bldo2"
++#define AXP858_BLDO3 "bldo3"
++#define AXP858_BLDO4 "bldo4"
++#define AXP858_BLDO5 "bldo5"
++#define AXP858_CLDO1 "cldo1"
++#define AXP858_CLDO2 "cldo2"
++#define AXP858_CLDO3 "cldo3"
++#define AXP858_CLDO4 "cldo4"
++#define AXP858_CPUSLDO "cpusldo"
++#define AXP858_SWOUT "swout"
++
++static struct mfd_cell axp858_cells[] = {
++	{
++		.name		= "axp858-gpio",
++		.of_compatible	= "x-powers,axp858-gpio",
++/*		.num_resources = ARRAY_SIZE(axp1530_gpio_resources),
++		.resources = axp1530_gpio_resources,*/
++	},
++	{
++		.name = "axp858-pek",
++		.num_resources = ARRAY_SIZE(axp858_pek_resources),
++		.resources = axp858_pek_resources,
++		.of_compatible = "x-powers,axp858-pek",
++	},
++	{
++		.name = "axp858-regulator",
++	},
++/*	{
++		.name = "axp15-power-supply",
++		.of_compatible = "x-powers,axp15-power-supply",
++	},*/
++	{
++		.of_compatible = "xpower-vregulator,dcdc1",
++		.name = "reg-virt-consumer",
++		.id = 1,
++		.platform_data = AXP858_DCDC1,
++		.pdata_size = sizeof(AXP858_DCDC1),
++
++	},
++	{
++		.of_compatible = "xpower-vregulator,dcdc2",
++		.name = "reg-virt-consumer",
++		.id = 2,
++		.platform_data = AXP858_DCDC2,
++		.pdata_size = sizeof(AXP858_DCDC2),
++	},
++	{
++		.of_compatible = "xpower-vregulator,dcdc3",
++		.name = "reg-virt-consumer",
++		.id = 3,
++		.platform_data = AXP858_DCDC3,
++		.pdata_size = sizeof(AXP858_DCDC3),
++	},
++	{
++		.of_compatible = "xpower-vregulator,dcdc4",
++		.name = "reg-virt-consumer",
++		.id = 4,
++		.platform_data = AXP858_DCDC4,
++		.pdata_size = sizeof(AXP858_DCDC4),
++	},
++	{
++		.of_compatible = "xpower-vregulator,dcdc5",
++		.name = "reg-virt-consumer",
++		.id = 5,
++		.platform_data = AXP858_DCDC5,
++		.pdata_size = sizeof(AXP858_DCDC5),
++	},
++	{
++		.of_compatible = "xpower-vregulator,dcdc6",
++		.name = "reg-virt-consumer",
++		.id = 6,
++		.platform_data = AXP858_DCDC6,
++		.pdata_size = sizeof(AXP858_DCDC6),
++	},
++	{
++		.of_compatible = "xpower-vregulator,aldo1",
++		.name = "reg-virt-consumer",
++		.id = 7,
++		.platform_data = AXP858_ALDO1,
++		.pdata_size = sizeof(AXP858_ALDO1),
++	},
++	{
++		.of_compatible = "xpower-vregulator,aldo2",
++		.name = "reg-virt-consumer",
++		.id = 8,
++		.platform_data = AXP858_ALDO2,
++		.pdata_size = sizeof(AXP858_ALDO2),
++	},
++	{
++		.of_compatible = "xpower-vregulator,aldo3",
++		.name = "reg-virt-consumer",
++		.id = 9,
++		.platform_data = AXP858_ALDO3,
++		.pdata_size = sizeof(AXP858_ALDO3),
++	},
++	{
++		.of_compatible = "xpower-vregulator,aldo4",
++		.name = "reg-virt-consumer",
++		.id = 10,
++		.platform_data = AXP858_ALDO4,
++		.pdata_size = sizeof(AXP858_ALDO4),
++	},
++	{
++		.of_compatible = "xpower-vregulator,aldo5",
++		.name = "reg-virt-consumer",
++		.id = 11,
++		.platform_data = AXP858_ALDO5,
++		.pdata_size = sizeof(AXP858_ALDO5),
++	},
++	{
++		.of_compatible = "xpower-vregulator,bldo1",
++		.name = "reg-virt-consumer",
++		.id = 12,
++		.platform_data = AXP858_BLDO1,
++		.pdata_size = sizeof(AXP858_BLDO1),
++	},
++	{
++		.of_compatible = "xpower-vregulator,bldo2",
++		.name = "reg-virt-consumer",
++		.id = 13,
++		.platform_data = AXP858_BLDO2,
++		.pdata_size = sizeof(AXP858_BLDO2),
++	},
++	{
++		.of_compatible = "xpower-vregulator,bldo3",
++		.name = "reg-virt-consumer",
++		.id = 14,
++		.platform_data = AXP858_BLDO3,
++		.pdata_size = sizeof(AXP858_BLDO3),
++	},
++	{
++		.of_compatible = "xpower-vregulator,bldo4",
++		.name = "reg-virt-consumer",
++		.id = 15,
++		.platform_data = AXP858_BLDO4,
++		.pdata_size = sizeof(AXP858_BLDO4),
++	},
++	{
++		.of_compatible = "xpower-vregulator,bldo5",
++		.name = "reg-virt-consumer",
++		.id = 16,
++		.platform_data = AXP858_BLDO5,
++		.pdata_size = sizeof(AXP858_BLDO5),
++	},
++	{
++		.of_compatible = "xpower-vregulator,cldo1",
++		.name = "reg-virt-consumer",
++		.id = 17,
++		.platform_data = AXP858_CLDO1,
++		.pdata_size = sizeof(AXP858_CLDO1),
++	},
++	{
++		.of_compatible = "xpower-vregulator,cldo2",
++		.name = "reg-virt-consumer",
++		.id = 18,
++		.platform_data = AXP858_CLDO2,
++		.pdata_size = sizeof(AXP858_CLDO2),
++	},
++	{
++		.of_compatible = "xpower-vregulator,cldo3",
++		.name = "reg-virt-consumer",
++		.id = 19,
++		.platform_data = AXP858_CLDO3,
++		.pdata_size = sizeof(AXP858_CLDO3),
++	},
++	{
++		.of_compatible = "xpower-vregulator,cldo4",
++		.name = "reg-virt-consumer",
++		.id = 20,
++		.platform_data = AXP858_CLDO4,
++		.pdata_size = sizeof(AXP858_CLDO4),
++	},
++	{
++		.of_compatible = "xpower-vregulator,cpusldo",
++		.name = "reg-virt-consumer",
++		.id = 21,
++		.platform_data = AXP858_CPUSLDO,
++		.pdata_size = sizeof(AXP858_CPUSLDO),
++	},
++	{
++		.of_compatible = "xpower-vregulator,swout",
++		.name = "reg-virt-consumer",
++		.id = 22,
++		.platform_data = AXP858_SWOUT,
++		.pdata_size = sizeof(AXP858_SWOUT),
++	},
++};
++
+ static const struct mfd_cell axp15060_cells[] = {
+ 	{
+ 		.name		= "axp221-pek",
+ 		.num_resources	= ARRAY_SIZE(axp15060_pek_resources),
+ 		.resources	= axp15060_pek_resources,
+@@ -1906,10 +2171,16 @@ int axp20x_match_device(struct axp20x_dev *axp20x)
+ 			axp20x->cells = axp_regulator_only_cells;
+ 		}
+ 		axp20x->regmap_cfg = &axp15060_regmap_config;
+ 		axp20x->regmap_irq_chip = &axp15060_regmap_irq_chip;
+ 		break;
++	case AXP858_ID:
++		axp20x->nr_cells = ARRAY_SIZE(axp858_cells);
++		axp20x->cells = axp858_cells;
++		axp20x->regmap_cfg = &axp858_regmap_config;
++		axp20x->regmap_irq_chip = &axp858_regmap_irq_chip;
++		break;		
+ 	default:
+ 		dev_err(dev, "unsupported AXP20X ID %lu\n", axp20x->variant);
+ 		return -EINVAL;
+ 	}
+ 	dev_info(dev, "AXP20x variant %s found\n",
+@@ -1969,11 +2240,12 @@ int axp20x_device_probe(struct axp20x_dev *axp20x)
+ 	ret = mfd_add_devices(axp20x->dev, -1, axp20x->cells,
+ 			      axp20x->nr_cells, NULL, 0, NULL);
+ 
+ 	if (ret) {
+ 		dev_err(axp20x->dev, "failed to add MFD devices: %d\n", ret);
+-		regmap_del_irq_chip(axp20x->irq, axp20x->regmap_irqc);
++		if (axp20x->irq)
++			regmap_del_irq_chip(axp20x->irq, axp20x->regmap_irqc);
+ 		return ret;
+ 	}
+ 
+ 	if (axp20x->variant != AXP288_ID)
+ 		devm_register_sys_off_handler(axp20x->dev,
+@@ -1996,11 +2268,13 @@ void axp20x_device_remove(struct axp20x_dev *axp20x)
+ 	if (axp20x->variant == AXP209_ID || axp20x->variant == AXP202_ID) {
+ 		axp20x_sysfs_exit(axp20x);
+ 	}
+ 
+ 	mfd_remove_devices(axp20x->dev);
+-	regmap_del_irq_chip(axp20x->irq, axp20x->regmap_irqc);
++
++	if (axp20x->irq)
++		regmap_del_irq_chip(axp20x->irq, axp20x->regmap_irqc);
+ }
+ EXPORT_SYMBOL(axp20x_device_remove);
+ 
+ MODULE_DESCRIPTION("PMIC MFD core driver for AXP20X");
+ MODULE_AUTHOR("Carlo Caione <carlo@caione.org>");
+diff --git a/drivers/regulator/axp20x-regulator.c b/drivers/regulator/axp20x-regulator.c
+index 13ef198c7..8edbe74c2 100644
+--- a/drivers/regulator/axp20x-regulator.c
++++ b/drivers/regulator/axp20x-regulator.c
+@@ -1213,10 +1213,76 @@ static const struct regulator_desc axp15060_regulators[] = {
+ 		    AXP15060_PWR_OUT_CTRL3, AXP15060_PWR_OUT_SW_MASK),
+ 	/* Supply comes from ALDO1 */
+ 	AXP_DESC_FIXED(AXP15060, RTC_LDO, "rtc-ldo", NULL, 1800),
+ };
+ 
++static const struct linear_range axp858_dcdc2_ranges[] = {
++	REGULATOR_LINEAR_RANGE(500000, 0x0, 0x46, 10000),
++	REGULATOR_LINEAR_RANGE(1220000, 0x47, 0x57, 20000),
++};
++
++static const struct linear_range axp858_dcdc3_ranges[] = {
++	REGULATOR_LINEAR_RANGE(500000, 0x0, 0x46, 10000),
++	REGULATOR_LINEAR_RANGE(1220000, 0x47, 0x57, 20000),
++};
++
++static const struct linear_range axp858_dcdc4_ranges[] = {
++	REGULATOR_LINEAR_RANGE(500000, 0x0, 0x46, 10000),
++	REGULATOR_LINEAR_RANGE(1220000, 0x47, 0x57, 20000),
++};
++
++static const struct linear_range axp858_dcdc5_ranges[] = {
++	REGULATOR_LINEAR_RANGE(800000, 0x0, 0x20, 10000),
++	REGULATOR_LINEAR_RANGE(1140000, 0x21, 0x44, 20000),
++};
++
++static const struct regulator_desc axp858_regulators[] = {
++	AXP_DESC(AXP858, DCDC1, "dcdc1", "vin1", 1500, 3400, 100,
++		 AXP858_DCDC1_CONTROL, 0x1f, AXP858_OUTPUT_CONTROL1, BIT(0)),
++	AXP_DESC_RANGES(AXP858, DCDC2, "dcdc2", "vin2", axp858_dcdc2_ranges,
++			0x58, AXP858_DCDC2_CONTROL, 0x7f, AXP858_OUTPUT_CONTROL1, BIT(1)),
++	AXP_DESC_RANGES(AXP858, DCDC3, "dcdc3", "vin3", axp858_dcdc3_ranges,
++			0x58, AXP858_DCDC3_CONTROL, 0x7f, AXP858_OUTPUT_CONTROL1, BIT(2)),
++	AXP_DESC_RANGES(AXP858, DCDC4, "dcdc4", "vin4", axp858_dcdc4_ranges,
++			0x58, AXP858_DCDC4_CONTROL, 0x7f, AXP858_OUTPUT_CONTROL1, BIT(3)),
++	AXP_DESC_RANGES(AXP858, DCDC5, "dcdc5", "vin5", axp858_dcdc5_ranges,
++			0x45, AXP858_DCDC5_CONTROL, 0x7f, AXP858_OUTPUT_CONTROL1, BIT(4)),
++	AXP_DESC(AXP858, DCDC6, "dcdc6", "vin6", 500, 3400, 100,
++		 AXP858_DCDC6_CONTROL, 0x1f, AXP858_OUTPUT_CONTROL1, BIT(5)),
++	AXP_DESC(AXP858, ALDO1, "aldo1", "aldoin", 700, 3300, 100,
++		 AXP858_ALDO1_CONTROL, 0x1f, AXP858_OUTPUT_CONTROL2, BIT(0)),
++	AXP_DESC(AXP858, ALDO2, "aldo2", "aldoin", 700, 3300, 100,
++		 AXP858_ALDO2_CTL, 0x1f, AXP858_OUTPUT_CONTROL2, BIT(1)),
++	AXP_DESC(AXP858, ALDO3, "aldo3", "aldoin", 700, 3300, 100,
++		 AXP858_ALDO3_CTL, 0x1f, AXP858_OUTPUT_CONTROL2, BIT(2)),
++	AXP_DESC(AXP858, ALDO4, "aldo4", "aldoin", 700, 3300, 100,
++		 AXP858_ALDO4_CTL, 0x1f, AXP858_OUTPUT_CONTROL2, BIT(3)),
++	AXP_DESC(AXP858, ALDO5, "aldo5", "aldoin", 700, 3300, 100,
++		 AXP858_ALDO5_CTL, 0x1f, AXP858_OUTPUT_CONTROL2, BIT(4)),
++	AXP_DESC(AXP858, BLDO1, "bldo1", "bldoin", 700, 3300, 100,
++		 AXP858_BLDO1_CTL, 0x1f, AXP858_OUTPUT_CONTROL2, BIT(5)),
++	AXP_DESC(AXP858, BLDO2, "bldo2", "bldoin", 700, 3300, 100,
++		 AXP858_BLDO2_CTL, 0x1f, AXP858_OUTPUT_CONTROL2, BIT(6)),
++	AXP_DESC(AXP858, BLDO3, "bldo3", "bldoin", 700, 3300, 100,
++		 AXP858_BLDO3_CTL, 0x1f, AXP858_OUTPUT_CONTROL2, BIT(7)),
++	AXP_DESC(AXP858, BLDO4, "bldo4", "bldoin", 700, 3300, 100,
++		 AXP858_BLDO4_CTL, 0x1f, AXP858_OUTPUT_CONTROL3, BIT(0)),
++	AXP_DESC(AXP858, BLDO5, "bldo5", "bldoin", 700, 3300, 100,
++		 AXP858_BLDO5_CTL, 0x1f, AXP858_OUTPUT_CONTROL3, BIT(1)),
++	AXP_DESC(AXP858, CLDO1, "cldo1", "cldoin", 700, 3300, 100,
++		 AXP858_CLDO1_CTL, 0x1f, AXP858_OUTPUT_CONTROL3, BIT(2)),
++	AXP_DESC(AXP858, CLDO2, "cldo2", "cldoin", 700, 3300, 100,
++		 AXP858_CLDO2_CTL, 0x1f, AXP858_OUTPUT_CONTROL3, BIT(3)),
++	AXP_DESC(AXP858, CLDO3, "cldo3", "cldoin", 700, 3300, 100,
++		 AXP858_CLDO3_GPIO1_CTL, 0x1f, AXP858_OUTPUT_CONTROL3, BIT(4)),
++	AXP_DESC(AXP858, CLDO4, "cldo4", "cldoin", 700, 4200, 100,
++		 AXP858_CLDO4_CTL, 0x3f, AXP858_OUTPUT_CONTROL3, BIT(5)),
++	AXP_DESC(AXP858, CPUSLDO, "cpusldo", "cpusldoin", 700, 1400, 50,
++		 AXP858_CPUSLDO_CTL, 0x1f, AXP858_OUTPUT_CONTROL3, BIT(6)),
++	AXP_DESC_SW(AXP858, DC1SW, "dc1sw", "swin", AXP858_OUTPUT_CONTROL3, BIT(7)),
++};
++
+ static int axp20x_set_dcdc_freq(struct platform_device *pdev, u32 dcdcfreq)
+ {
+ 	struct axp20x_dev *axp20x = dev_get_drvdata(pdev->dev.parent);
+ 	unsigned int reg = AXP20X_DCDC_FREQ;
+ 	u32 min, max, def, step;
+@@ -1503,10 +1569,14 @@ static int axp20x_regulator_probe(struct platform_device *pdev)
+ 		break;
+ 	case AXP15060_ID:
+ 		regulators = axp15060_regulators;
+ 		nregulators = AXP15060_REG_ID_MAX;
+ 		break;
++	case AXP858_ID:
++		regulators = axp858_regulators;
++		nregulators = AXP858_REG_ID_MAX;
++		break;
+ 	default:
+ 		dev_err(&pdev->dev, "Unsupported AXP variant: %ld\n",
+ 			axp20x->variant);
+ 		return -EINVAL;
+ 	}
+diff --git a/include/linux/mfd/axp20x.h b/include/linux/mfd/axp20x.h
+index 3877f9576..3b10a4767 100644
+--- a/include/linux/mfd/axp20x.h
++++ b/include/linux/mfd/axp20x.h
+@@ -21,10 +21,11 @@ enum axp20x_variants {
+ 	AXP313A_ID,
+ 	AXP803_ID,
+ 	AXP806_ID,
+ 	AXP809_ID,
+ 	AXP813_ID,
++	AXP858_ID,
+ 	AXP15060_ID,
+ 	NR_AXP20X_VARIANTS,
+ };
+ 
+ #define AXP192_DATACACHE(m)		(0x06 + (m))
+@@ -185,10 +186,97 @@ enum axp20x_variants {
+ #define AXP15060_CPUSLDO_V_CTRL		0x2e
+ #define AXP15060_PWR_WAKEUP_CTRL		0x31
+ #define AXP15060_PWR_DISABLE_DOWN_SEQ		0x32
+ #define AXP15060_PEK_KEY		0x36
+ 
++/* For AXP858 */
++#define AXP858_ON_INDICATE          (0x00)
++#define AXP858_OFF_INDICATE         (0x01)
++#define AXP858_IC_TYPE              (0x03)
++#define AXP858_DATA_BUFFER1        (0x04)
++#define AXP858_DATA_BUFFER2        (0x05)
++#define AXP858_DATA_BUFFER3        (0x06)
++#define AXP858_DATA_BUFFER4        (0x07)
++
++#define AXP858_OUTPUT_CONTROL1       (0x10)
++#define AXP858_OUTPUT_CONTROL2      (0x11)
++#define AXP858_OUTPUT_CONTROL3        (0x12)
++#define AXP858_DCDC1_CONTROL        (0x13)
++#define AXP858_DCDC2_CONTROL        (0x14)
++#define AXP858_DCDC3_CONTROL        (0x15)
++#define AXP858_DCDC4_CONTROL        (0x16)
++#define AXP858_DCDC5_CONTROL         (0x17)
++#define AXP858_DCDC6_CONTROL            (0x18)
++#define AXP858_ALDO1_CONTROL       (0x19)
++#define AXP858_DCDC_MODE1       (0x1A)
++#define AXP858_DCDC_MODE2          (0x1B)
++#define AXP858_DCDC_MODE3          (0x1C)
++#define AXP858_DCDC_FREQUENCY          (0x1D)
++#define AXP858_OUTPUT_MONITOR           (0x1E)
++#define AXP858_IRQ_PWROK_VOFF            (0x1F)
++#define AXP858_ALDO2_CTL       (0x20)
++#define AXP858_ALDO3_CTL   (0x21)
++#define AXP858_ALDO4_CTL          (0x22)
++#define AXP858_ALDO5_CTL       (0x23)
++#define AXP858_BLDO1_CTL        (0x24)
++#define AXP858_BLDO2_CTL            (0x25)
++#define AXP858_BLDO3_CTL             (0x26)
++#define AXP858_BLDO4_CTL            (0x27)
++#define AXP858_BLDO5_CTL            (0x28)
++#define AXP858_CLDO1_CTL            (0x29)
++#define AXP858_CLDO2_CTL            (0x2A)
++#define AXP858_CLDO3_GPIO1_CTL            (0x2B)
++#define AXP858_CLDO4_GPIO2_CTL            (0x2C)
++#define AXP858_CLDO4_CTL            (0x2D)
++#define AXP858_CPUSLDO_CTL            (0x2E)
++#define AXP858_WKP_CTL_OC_IRQ            (0x31)
++#define AXP858_POWER_DOWN_DIS            (0x32)
++#define AXP858_POK_SET            (0x36)
++#define AXP858_TWI_OR_RSB            (0x3E)
++#define AXP858_IRQ_EN1            (0x40)
++#define AXP858_IRQ_EN2            (0x41)
++#define AXP858_IRQ_STS1            (0x48)
++#define AXP858_IRQ_STS2            (0x49)
++#define AXP858_DIGITAL_PAT1            (0xF0)
++#define AXP858_DIGITAL_PAT2            (0xF1)
++#define AXP858_EPROM_SET            (0xF2)
++#define AXP858_VREF_TEM_SET            (0xF3)
++#define AXP858_LOCK_F0125            (0xF4)
++#define AXP858_EPROM_TUNE            (0xF5)
++#define AXP858_ADDR_EXTEN            (0xFF)
++#define AXP858_DCDC1_PWRON_DEF          (0x100)
++#define AXP858_DCDC2_DEF          (0x101)
++#define AXP858_DCDC3_DEF          (0x102)
++#define AXP858_DCDC4_DEF          (0x103)
++#define AXP858_DCDC5_DEF          (0x104)
++#define AXP858_DCDC6_DEF          (0x105)
++#define AXP858_ALDO12_DEF          (0x106)
++#define AXP858_ALDO23_DEF          (0x107)
++#define AXP858_ALDO45_DEF          (0x108)
++#define AXP858_ALDO5_BLDO1_DEF          (0x109)
++#define AXP858_BLDO12_DEF          (0x10A)
++#define AXP858_BLDO23_DEF          (0x10B)
++#define AXP858_BLDO45_DEF          (0x10C)
++#define AXP858_BLDO5_CLDO1_DEF          (0x10D)
++#define AXP858_CLDO23_DEF          (0x10E)
++#define AXP858_CLDO34_DEF          (0x10F)
++#define AXP858_START_DCDC123          (0x110)
++#define AXP858_START_DCDC456          (0x111)
++#define AXP858_START_ALDO12          (0x112)
++#define AXP858_START_ALDO345          (0x113)
++#define AXP858_START_BLDO123          (0x114)
++#define AXP858_START_BLDO45          (0x115)
++#define AXP858_START_CLDO123          (0x116)
++#define AXP858_START_CLDO34_CPUS          (0x117)
++#define AXP858_TWI_RSB_SET1          (0x118)
++#define AXP858_TWI_RSB_SET2          (0x119)
++#define AXP858_TWI_SET          (0x11A)
++#define AXP858_VREF_TC_ALDO3          (0x140)
++#define AXP858_VREF_VOL          (0x141)
++#define AXP858_INTERNAL_ALDO2          (0x142)
++#define AXP858_FREQUENCY_ALDO2          (0x143)
++
+ /* Interrupt */
+ #define AXP152_IRQ1_EN			0x40
+ #define AXP152_IRQ2_EN			0x41
+ #define AXP152_IRQ3_EN			0x42
+ #define AXP152_IRQ1_STATE		0x48
+@@ -556,10 +644,37 @@ enum {
+ 	AXP15060_SW,
+ 	AXP15060_RTC_LDO,
+ 	AXP15060_REG_ID_MAX,
+ };
+ 
++enum {
++	AXP858_DCDC1 = 0,
++	AXP858_DCDC2,
++	AXP858_DCDC3,
++	AXP858_DCDC4,
++	AXP858_DCDC5,
++	AXP858_DCDC6,
++	AXP858_ALDO1,
++	AXP858_ALDO2,
++	AXP858_ALDO3,
++	AXP858_ALDO4,
++	AXP858_ALDO5,
++	AXP858_BLDO1,
++	AXP858_BLDO2,
++	AXP858_BLDO3,
++	AXP858_BLDO4,
++	AXP858_BLDO5,
++	AXP858_CLDO1,
++	AXP858_CLDO2,
++	AXP858_CLDO3,
++	AXP858_CLDO4,
++	AXP858_CPUSLDO,
++	AXP858_DC1SW,
++	AXP858_REG_ID_MAX,
++};
++
++
+ /* IRQs */
+ enum {
+ 	AXP152_IRQ_LDO0IN_CONNECT = 1,
+ 	AXP152_IRQ_LDO0IN_REMOVAL,
+ 	AXP152_IRQ_ALDO0IN_CONNECT,
+@@ -837,10 +952,31 @@ enum axp15060_irqs {
+ 	AXP15060_IRQ_PEK_FAL_EDGE,
+ 	AXP15060_IRQ_PEK_RIS_EDGE,
+ 	AXP15060_IRQ_GPIO2_INPUT,
+ };
+ 
++enum axp858_irqs {
++	/* irq0 */
++	AXP858_IRQ_TEMP_OVER1 = 0,
++	AXP858_IRQ_TEMP_OVER2,
++	AXP858_IRQ_DCDC1_UNDER,
++	AXP858_IRQ_DCDC2_UNDER,
++	AXP858_IRQ_DCDC3_UNDER,
++	AXP858_IRQ_DCDC4_UNDER,
++	AXP858_IRQ_DCDC5_UNDER,
++	AXP858_IRQ_DCDC6_UNDER,
++	/* irq1 */
++	AXP858_IRQ_POKLIRQ_EN,
++	AXP858_IRQ_POKSIRQ_EN,
++	AXP858_IRQ_GPIO1_EN,
++	AXP858_IRQ_POKNIRQ_EN,
++	AXP858_IRQ_POKPIRQ_EN,
++	AXP858_IRQ_GPIO2_EN,
++	AXP858_IRQ_DCDC2_CUR_OVER,
++	AXP858_IRQ_DCDC3_CUR_OVER,
++};
++
+ struct axp20x_dev {
+ 	struct device			*dev;
+ 	int				irq;
+ 	unsigned long			irq_flags;
+ 	struct regmap			*regmap;
+-- 
+Created with Armbian build tools https://github.com/armbian/build
+
