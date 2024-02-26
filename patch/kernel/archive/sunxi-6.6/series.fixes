@@ -8,3 +8,4 @@
 -	patches.fixes/Fix-warning-unused-variable-delay_us.patch
 -	patches.fixes/Fix-depends-only-ARM-eInk-display-FB.patch
 	patches.fixes/Fix-duplicate-nodes-for-sun50i-h5-orangepi-pc2.patch
+	patches.fixes/Fix-t507-disable-thermal-trips.patch
