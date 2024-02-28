@@ -3,7 +3,7 @@ new file mode 100644
 index 0000000000..3ec8831e05
 --- /dev/null
 +++ b/arch/arm/dts/sun50i-t507-okt507c.dts
-@@ -0,0 +1,471 @@
+@@ -0,0 +1,453 @@
 +// SPDX-License-Identifier: (GPL-2.0+ or MIT)
 +/*
 + * Copyright (C) 2020 Arm Ltd.
@@ -47,6 +47,10 @@ index 0000000000..3ec8831e05
 +	};
 +};
 +
++&cpu0 {
++	cpu-supply = <&reg_dcdc2>;
++};
++
 +&pio {
 +	vcc-pa-supply = <&reg_vcc5v>;
 +	vcc-pb-supply = <&reg_vcc5v>;
@@ -66,54 +70,20 @@ index 0000000000..3ec8831e05
 +};
 +
 +&mmc0 {
++	cd-gpios = <&pio 5 6 GPIO_ACTIVE_LOW>;	/* PF6 */
 +	vmmc-supply = <&reg_dcdc1>;
-+	vqmmc33sw-supply = <&reg_dcdc1>;
-+	vdmmc33sw-supply = <&reg_dcdc1>;
-+	vqmmc18sw-supply = <&reg_aldo2>;
-+	vdmmc18sw-supply = <&reg_aldo2>;
 +	bus-width = <4>;
-+	cd-gpios = <&pio 5 6 GPIO_ACTIVE_LOW>; // PF6
-+	cd-used-24M;
-+	cap-sd-highspeed;
-+	sd-uhs-sdr50;
-+	sd-uhs-ddr50;
-+	sd-uhs-sdr104;
-+	no-sdio;
-+	no-mmc;
-+	sunxi-power-save-mode;
-+	sunxi-signal-vol-sw-without-pmu;
-+	max-frequency = <150000000>;
-+	ctl-spec-caps = <0x8>;
 +	status = "okay";
-+};
-+
-+&mmc1 {
-+    no-mmc;
-+    no-sd;
-+    cap-sd-highspeed;
-+    sunxi-dis-signal-vol-sw;
-+    cap-sdio-irq;
-+    keep-power-in-suspend;
-+    ignore-pm-notify;
-+    max-frequency = <50000000>;
-+    ctl-spec-caps = <0x8>;
-+    status = "okay";
 +};
 +
 +&mmc2 {
-+	status = "okay";
-+	vmmc-supply = <&reg_aldo1>;
-+	vqmmc-supply = <&reg_dcdc1>;
-+	max-frequency = <100000000>;
++	vmmc-supply = <&reg_dcdc1>;
++	vqmmc-supply = <&reg_aldo1>;
 +	bus-width = <8>;
-+	mmc-ddr-1_8v;
++	non-removable;
++	cap-mmc-hw-reset;
 +	mmc-hs200-1_8v;
-+	mmc-hs400-1_8v;
-+	no-sdio;
-+	no-sd;
-+    non-removable;
-+	sunxi-dis-signal-vol-sw;
-+	ctl-spec-caps = <0x8>;
++	status = "okay";
 +};
 +
 +&r_i2c {
@@ -127,6 +97,18 @@ index 0000000000..3ec8831e05
 +		//interrupt-parent = <&nmi_intc>;
 +		//interrupts = <0 IRQ_TYPE_LEVEL_LOW>;
 +		wakeup_source;
++
++		vin1-supply = <&reg_vcc5v>;
++		vin2-supply = <&reg_vcc5v>;
++		vin3-supply = <&reg_vcc5v>;
++		vin4-supply = <&reg_vcc5v>;
++		vin5-supply = <&reg_vcc5v>;
++		vin6-supply = <&reg_vcc5v>;
++		aldoin-supply = <&reg_vcc5v>;
++		bldoin-supply = <&reg_vcc5v>;
++		cldoin-supply = <&reg_vcc5v>;
++		ips-supply = <&reg_vcc5v>;
++		swin-supply = <&reg_dcdc1>;
 +
 +		powerkey0: powerkey@0{
 +			status = "okay";
