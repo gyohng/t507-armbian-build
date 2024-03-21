@@ -1,0 +1,36 @@
+From 4fa824efd84b2da187a67f2e49724f377051c2bf Mon Sep 17 00:00:00 2001
+From: Andre Przywara <andre.przywara@arm.com>
+Date: Fri, 9 Feb 2024 11:57:58 +0000
+Subject: [PATCH 03/33] arm64: dts: allwinner: h616: Add 32K fanout pin
+
+On some boards the designers saved on a 32KHz crystal for some external
+chips, so the SoC has to help out, with providing a 32 KHz clock signal.
+
+Add a pinctrl group node to allow DT nodes to reference this fanout signal.
+
+Signed-off-by: Andre Przywara <andre.przywara@arm.com>
+Reviewed-by: Jernej Skrabec <jernej.skrabec@gmail.com>
+---
+ arch/arm64/boot/dts/allwinner/sun50i-h616.dtsi | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/allwinner/sun50i-h616.dtsi b/arch/arm64/boot/dts/allwinner/sun50i-h616.dtsi
+index e5c9f062b53c..7a3bf7671a42 100644
+--- a/arch/arm64/boot/dts/allwinner/sun50i-h616.dtsi
++++ b/arch/arm64/boot/dts/allwinner/sun50i-h616.dtsi
+@@ -270,6 +270,12 @@ uart1_rts_cts_pins: uart1-rts-cts-pins {
+ 				pins = "PG8", "PG9";
+ 				function = "uart1";
+ 			};
++
++			/omit-if-no-ref/
++			x32clk_fanout_pin: x32clk-fanout-pin {
++				pins = "PG10";
++				function = "clock";
++			};
+ 		};
+ 
+ 		gic: interrupt-controller@3021000 {
+-- 
+2.44.0
+

@@ -1,0 +1,99 @@
+From 2df94912177da5c834bfbc9dcbdc26a472174039 Mon Sep 17 00:00:00 2001
+From: Jernej Skrabec <jernej.skrabec@gmail.com>
+Date: Wed, 28 Feb 2024 19:19:01 +0100
+Subject: [PATCH 26/33] arm64: dts: allwinner: h616: add LVDS panel to OKT507-C
+
+Signed-off-by: Jernej Skrabec <jernej.skrabec@gmail.com>
+---
+ .../dts/allwinner/sun50i-t507-okt507c.dts     | 54 +++++++++++++++++++
+ 1 file changed, 54 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/allwinner/sun50i-t507-okt507c.dts b/arch/arm64/boot/dts/allwinner/sun50i-t507-okt507c.dts
+index 6f3bb11f4d3d..ae4aa0eb73dc 100644
+--- a/arch/arm64/boot/dts/allwinner/sun50i-t507-okt507c.dts
++++ b/arch/arm64/boot/dts/allwinner/sun50i-t507-okt507c.dts
+@@ -26,6 +26,15 @@ chosen {
+ 		stdout-path = "serial0:115200n8";
+ 	};
+ 
++	backlight: backlight {
++		compatible = "pwm-backlight";
++		//pwms = <&pwm 0 20000 PWM_POLARITY_INVERTED>;
++		enable-gpios = <&pio 4 22 GPIO_ACTIVE_HIGH>; /* PE22 */
++		power-supply = <&reg_sw>;
++		brightness-levels = <0 1 2 4 8 16 32 64 128 255>;
++		default-brightness-level = <9>;
++	};
++
+ 	leds {
+ 		compatible = "gpio-leds";
+ 
+@@ -37,6 +46,35 @@ led-0 {
+ 		};
+ 	};
+ 
++	panel {
++		compatible = "panel-lvds";
++		backlight = <&backlight>;
++		power-supply = <&reg_sw>;
++
++		width-mm = <217>;
++		height-mm = <136>;
++		data-mapping = "vesa-24";
++
++		panel-timing {
++			/* 1280x800 @60Hz */
++			clock-frequency = <71000000>;
++			hactive = <1280>;
++			vactive = <800>;
++			hsync-len = <40>;
++			hfront-porch = <60>;
++			hback-porch = <60>;
++			vfront-porch = <11>;
++			vback-porch = <11>;
++			vsync-len = <1>;
++		};
++
++		port {
++			panel_input: endpoint {
++				remote-endpoint = <&tcon_lcd0_out_lcd>;
++			};
++		};
++	};
++
+ 	reg_vcc5v: vcc5v {
+ 		compatible = "regulator-fixed";
+ 		regulator-name = "vcc-5v";
+@@ -78,6 +116,10 @@ &cpu0 {
+ 	cpu-supply = <&reg_dcdc2>;
+ };
+ 
++&de {
++	status = "okay";
++};
++
+ &ehci0 {
+ 	status = "okay";
+ };
+@@ -329,6 +371,18 @@ reg_sw: sw {
+ 	};
+ };
+ 
++&tcon_lcd0 {
++	pinctrl-names = "default";
++	pinctrl-0 = <&lvds0_pins>;
++	status = "okay";
++};
++
++&tcon_lcd0_out {
++	tcon_lcd0_out_lcd: endpoint {
++		remote-endpoint = <&panel_input>;
++	};
++};
++
+ &uart0 {
+ 	pinctrl-names = "default";
+ 	pinctrl-0 = <&uart0_ph_pins>;
+-- 
+2.44.0
+

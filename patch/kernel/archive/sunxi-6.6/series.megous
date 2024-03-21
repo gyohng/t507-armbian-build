@@ -95,20 +95,20 @@
 	patches.megous/media-gc2145-implement-system-suspend.patch
 	patches.megous/media-ov5640-use-pm_runtime_force_suspend-resume-for-system-sus.patch
 	patches.megous/media-gc2145-fix-white-balance-colors.patch
-	patches.megous/drm-sun4i-Unify-sun8i_-_layer-structs.patch
-	patches.megous/drm-sun4i-Add-more-parameters-to-sunxi_engine-commit-callback.patch
-	patches.megous/drm-sun4i-Fix-layer-zpos-change-atomic-modesetting.patch
+-	patches.megous/drm-sun4i-Unify-sun8i_-_layer-structs.patch
+-	patches.megous/drm-sun4i-Add-more-parameters-to-sunxi_engine-commit-callback.patch
+-	patches.megous/drm-sun4i-Fix-layer-zpos-change-atomic-modesetting.patch
 -	patches.megous/drm-sun4i-Fix-wrong-location-of-clk_prepare_enable.patch
 -	patches.megous/drm-sun4i-Mark-one-of-the-UI-planes-as-a-cursor-one.patch
-	patches.megous/drm-sun4i-Implement-gamma-correction.patch
+-	patches.megous/drm-sun4i-Implement-gamma-correction.patch
 	patches.megous/drm-panel-st7703-Improve-the-power-up-down-sequence-of-the-pane.patch
 	patches.megous/drm-panel-st7703-Fix-xbd599-timings-to-make-refresh-rate-exactl.patch
-	patches.megous/drm-sun4i-Support-taking-over-display-pipeline-state-from-p-boo.patch
-	patches.megous/video-pwm_bl-Allow-to-change-lth_brightness-via-sysfs.patch
+-	patches.megous/drm-sun4i-Support-taking-over-display-pipeline-state-from-p-boo.patch
+-	patches.megous/video-pwm_bl-Allow-to-change-lth_brightness-via-sysfs.patch
 	patches.megous/clk-sunxi-ng-add-support-for-rate-resetting-notifier.patch
 	patches.megous/clk-sunxi-ng-a64-keep-tcon0-clock-rate-when-pll-video0-s-rate-c.patch
-	patches.megous/drm-sun4i-tcon-hand-over-the-duty-to-keep-TCON0-clock-to-CCU-on.patch
-	patches.megous/clk-sunxi-ng-sun50i-a64-Switch-parent-of-MIPI-DSI-to-periph0-1x.patch
+-	patches.megous/drm-sun4i-tcon-hand-over-the-duty-to-keep-TCON0-clock-to-CCU-on.patch
+-	patches.megous/clk-sunxi-ng-sun50i-a64-Switch-parent-of-MIPI-DSI-to-periph0-1x.patch
 	patches.megous/sunxi-Use-dev_err_probe-to-handle-EPROBE_DEFER-errors.patch
 	patches.megous/thermal-sun8i-Be-loud-when-probe-fails.patch
 	patches.megous/i2c-mv64xxx-Don-t-make-a-fuss-when-pinctrl-recovery-state-is-no.patch
