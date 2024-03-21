@@ -1,0 +1,164 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: John Doe <john.doe@somewhere.on.planet>
+Date: Thu, 21 Mar 2024 18:53:42 +0800
+Subject: Allow MMC controller frequency override
+
+Signed-off-by: John Doe <john.doe@somewhere.on.planet>
+---
+ drivers/mmc/Kconfig      |  6 +++
+ drivers/mmc/mmc-uclass.c |  4 ++
+ drivers/mmc/mmc.c        | 19 ++++++++--
+ drivers/mmc/sunxi_mmc.c  | 12 +++++-
+ 4 files changed, 36 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/mmc/Kconfig b/drivers/mmc/Kconfig
+index 17618c3bdc..9b921af208 100644
+--- a/drivers/mmc/Kconfig
++++ b/drivers/mmc/Kconfig
+@@ -52,10 +52,16 @@ config SPL_DM_MMC
+ 	  Secure Digital I/O (SDIO) cards. Both removable (SD, micro-SD, etc.)
+ 	  and non-removable (e.g. eMMC chip) devices are supported. These
+ 	  appear as block devices in U-Boot and can support filesystems such
+ 	  as EXT4 and FAT.
+ 
++config MMC_MAXFREQ
++	int "Maximum frequency of the MMC controller"
++	default -1
++	help
++	  Limit the maximum frequency for MMC controller in SPL and U-boot
++
+ if MMC
+ 
+ config MMC_SDHCI_ADMA_HELPERS
+ 	bool
+ 
+diff --git a/drivers/mmc/mmc-uclass.c b/drivers/mmc/mmc-uclass.c
+index 328456831d..1eed392291 100644
+--- a/drivers/mmc/mmc-uclass.c
++++ b/drivers/mmc/mmc-uclass.c
+@@ -225,10 +225,14 @@ int mmc_of_parse(struct udevice *dev, struct mmc_config *cfg)
+ 		return -EINVAL;
+ 	}
+ 
+ 	/* f_max is obtained from the optional "max-frequency" property */
+ 	dev_read_u32(dev, "max-frequency", &cfg->f_max);
++#if defined(CONFIG_MMC_MAXFREQ) && CONFIG_MMC_MAXFREQ > 0
++	if (cfg->f_max > CONFIG_MMC_MAXFREQ)
++		cfg->f_max = CONFIG_MMC_MAXFREQ;
++#endif	
+ 
+ 	if (dev_read_bool(dev, "cap-sd-highspeed"))
+ 		cfg->host_caps |= MMC_CAP(SD_HS);
+ 	if (dev_read_bool(dev, "cap-mmc-highspeed"))
+ 		cfg->host_caps |= MMC_CAP(MMC_HS) | MMC_CAP(MMC_HS_52);
+diff --git a/drivers/mmc/mmc.c b/drivers/mmc/mmc.c
+index d96db7a0f8..12a81b1388 100644
+--- a/drivers/mmc/mmc.c
++++ b/drivers/mmc/mmc.c
+@@ -178,16 +178,25 @@ static uint mmc_mode2freq(struct mmc *mmc, enum bus_mode mode)
+ 	      [MMC_HS_200]	= 200000000,
+ 	      [MMC_HS_400]	= 200000000,
+ 	      [MMC_HS_400_ES]	= 200000000,
+ 	};
+ 
++	uint freq = 0;
++
+ 	if (mode == MMC_LEGACY)
+-		return mmc->legacy_speed;
++		freq = mmc->legacy_speed;
+ 	else if (mode >= MMC_MODES_END)
+-		return 0;
++		freq = 0;
+ 	else
+-		return freqs[mode];
++		freq = freqs[mode];
++
++#if defined(CONFIG_MMC_MAXFREQ) && CONFIG_MMC_MAXFREQ > 0
++	if (freq > CONFIG_MMC_MAXFREQ)
++		freq = CONFIG_MMC_MAXFREQ;
++#endif
++
++	return freq;		
+ }
+ 
+ static int mmc_select_mode(struct mmc *mmc, enum bus_mode mode)
+ {
+ 	mmc->selected_mode = mode;
+@@ -1643,10 +1652,14 @@ static int mmc_host_power_cycle(struct mmc *mmc)
+ #endif
+ 
+ int mmc_set_clock(struct mmc *mmc, uint clock, bool disable)
+ {
+ 	if (!disable) {
++#if defined(CONFIG_MMC_MAXFREQ) && CONFIG_MMC_MAXFREQ > 0
++		if (clock > CONFIG_MMC_MAXFREQ)
++			clock = CONFIG_MMC_MAXFREQ;
++#endif
+ 		if (clock > mmc->cfg->f_max)
+ 			clock = mmc->cfg->f_max;
+ 
+ 		if (clock < mmc->cfg->f_min)
+ 			clock = mmc->cfg->f_min;
+diff --git a/drivers/mmc/sunxi_mmc.c b/drivers/mmc/sunxi_mmc.c
+index 714706d241..1dfe3690c4 100644
+--- a/drivers/mmc/sunxi_mmc.c
++++ b/drivers/mmc/sunxi_mmc.c
+@@ -35,10 +35,15 @@
+ 
+ #ifndef CCM_MMC_CTRL_MODE_SEL_NEW
+ #define CCM_MMC_CTRL_MODE_SEL_NEW	0
+ #endif
+ 
++#if !defined(CONFIG_MMC_MAXFREQ) || CONFIG_MMC_MAXFREQ <= 0
++#undef CONFIG_MMC_MAXFREQ
++#define CONFIG_MMC_MAXFREQ 52000000
++#endif
++
+ struct sunxi_mmc_plat {
+ 	struct mmc_config cfg;
+ 	struct mmc mmc;
+ };
+ 
+@@ -69,10 +74,13 @@ static int mmc_set_mod_clk(struct sunxi_mmc_priv *priv, unsigned int hz)
+ {
+ 	unsigned int pll, pll_hz, div, n, oclk_dly, sclk_dly;
+ 	bool new_mode = IS_ENABLED(CONFIG_MMC_SUNXI_HAS_NEW_MODE);
+ 	u32 val = 0;
+ 
++	if (hz > CONFIG_MMC_MAXFREQ)
++		hz = CONFIG_MMC_MAXFREQ;
++
+ 	/* A83T support new mode only on eMMC */
+ 	if (IS_ENABLED(CONFIG_MACH_SUN8I_A83T) && priv->mmc_no != 2)
+ 		new_mode = false;
+ 
+ 	if (hz <= 24000000) {
+@@ -540,11 +548,11 @@ struct mmc *sunxi_mmc_init(int sdc_no)
+ 
+ 	cfg->host_caps |= MMC_MODE_HS_52MHz | MMC_MODE_HS;
+ 	cfg->b_max = CONFIG_SYS_MMC_MAX_BLK_COUNT;
+ 
+ 	cfg->f_min = 400000;
+-	cfg->f_max = 52000000;
++	cfg->f_max = CONFIG_MMC_MAXFREQ;
+ 
+ 	if (mmc_resource_init(sdc_no) != 0)
+ 		return NULL;
+ 
+ 	/* config ahb clock */
+@@ -647,11 +655,11 @@ static int sunxi_mmc_probe(struct udevice *dev)
+ 	cfg->voltages = MMC_VDD_32_33 | MMC_VDD_33_34;
+ 	cfg->host_caps = MMC_MODE_HS_52MHz | MMC_MODE_HS;
+ 	cfg->b_max = CONFIG_SYS_MMC_MAX_BLK_COUNT;
+ 
+ 	cfg->f_min = 400000;
+-	cfg->f_max = 52000000;
++	cfg->f_max = CONFIG_MMC_MAXFREQ;
+ 
+ 	ret = mmc_of_parse(dev, cfg);
+ 	if (ret)
+ 		return ret;
+ 
+-- 
+Created with Armbian build tools https://github.com/armbian/build
+

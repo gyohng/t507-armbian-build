@@ -217,7 +217,7 @@ index 000000000000..b9fd40c23295
 +	no-sd;
 +	cap-mmc-highspeed;
 +	cap-mmc-hw-reset;
-+	max-frequency = <12000000>;
++	max-frequency = <50000000>;
 +	ctl-spec-caps = <0x8>;
 +	status = "okay";
 +};
@@ -413,7 +413,7 @@ new file mode 100644
 index 000000000000..3a451b2b6330
 --- /dev/null
 +++ b/configs/myb_yt507h_defconfig
-@@ -0,0 +1,29 @@
+@@ -0,0 +1,30 @@
 +CONFIG_ARM=y
 +CONFIG_ARCH_SUNXI=y
 +CONFIG_DEFAULT_DEVICE_TREE="sun50i-t507-myd-yt507h"
@@ -443,3 +443,4 @@ index 000000000000..3a451b2b6330
 +CONFIG_AXP858_POWER=y
 +CONFIG_AXP_DCDC5_VOLT=1100
 +CONFIG_MMC_SUNXI_SLOT_EXTRA=2
++CONFIG_MMC_MAXFREQ=12000000

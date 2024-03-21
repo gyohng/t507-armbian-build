@@ -1,0 +1,97 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: John Doe <john.doe@somewhere.on.planet>
+Date: Tue, 19 Mar 2024 17:45:56 +0800
+Subject: Alter MMC speed for more stable operation during SPL
+
+Signed-off-by: John Doe <john.doe@somewhere.on.planet>
+---
+ drivers/mmc/sunxi_mmc.c | 24 +++++++++-
+ 1 file changed, 22 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/mmc/sunxi_mmc.c b/drivers/mmc/sunxi_mmc.c
+index 714706d241..81ec36913f 100644
+--- a/drivers/mmc/sunxi_mmc.c
++++ b/drivers/mmc/sunxi_mmc.c
+@@ -540,11 +540,15 @@ struct mmc *sunxi_mmc_init(int sdc_no)
+ 
+ 	cfg->host_caps |= MMC_MODE_HS_52MHz | MMC_MODE_HS;
+ 	cfg->b_max = CONFIG_SYS_MMC_MAX_BLK_COUNT;
+ 
+ 	cfg->f_min = 400000;
+-	cfg->f_max = 52000000;
++#ifdef CONFIG_SPL_BUILD
++	cfg->f_max = 12000000;
++#else
++	cfg->f_max = 12000000;
++#endif
+ 
+ 	if (mmc_resource_init(sdc_no) != 0)
+ 		return NULL;
+ 
+ 	/* config ahb clock */
+@@ -564,11 +568,15 @@ struct mmc *sunxi_mmc_init(int sdc_no)
+ #else /* CONFIG_SUN50I_GEN_H6 */
+ 	setbits_le32(&ccm->sd_gate_reset, 1 << sdc_no);
+ 	/* unassert reset */
+ 	setbits_le32(&ccm->sd_gate_reset, 1 << (RESET_SHIFT + sdc_no));
+ #endif
+-	ret = mmc_set_mod_clk(priv, 24000000);
++#ifdef CONFIG_SPL_BUILD
++	ret = mmc_set_mod_clk(priv, 12000000);
++#else
++	ret = mmc_set_mod_clk(priv, 12000000);
++#endif	
+ 	if (ret)
+ 		return NULL;
+ 
+ 	return mmc_create(cfg, priv);
+ }
+@@ -647,11 +655,15 @@ static int sunxi_mmc_probe(struct udevice *dev)
+ 	cfg->voltages = MMC_VDD_32_33 | MMC_VDD_33_34;
+ 	cfg->host_caps = MMC_MODE_HS_52MHz | MMC_MODE_HS;
+ 	cfg->b_max = CONFIG_SYS_MMC_MAX_BLK_COUNT;
+ 
+ 	cfg->f_min = 400000;
+-	cfg->f_max = 52000000;
++#ifdef CONFIG_SPL_BUILD
++	cfg->f_max = 12000000;
++#else	
++	cfg->f_max = 12000000;
++#endif	
+ 
+ 	ret = mmc_of_parse(dev, cfg);
+ 	if (ret)
+ 		return ret;
+ 
+@@ -673,11 +685,15 @@ static int sunxi_mmc_probe(struct udevice *dev)
+ 
+ 	ret = reset_get_bulk(dev, &reset_bulk);
+ 	if (!ret)
+ 		reset_deassert_bulk(&reset_bulk);
+ 
+-	ret = mmc_set_mod_clk(priv, 24000000);
++#ifdef CONFIG_SPL_BUILD
++	ret = mmc_set_mod_clk(priv, 12000000);
++#else
++ 	ret = mmc_set_mod_clk(priv, 12000000);
++#endif
+ 	if (ret)
+ 		return ret;
+ 
+ 	/* This GPIO is optional */
+ 	gpio_request_by_name(dev, "cd-gpios", 0, &priv->cd_gpio,
+@@ -708,10 +724,14 @@ static const struct udevice_id sunxi_mmc_ids[] = {
+ 	{ .compatible = "allwinner,sun20i-d1-mmc" },
+ 	{ .compatible = "allwinner,sun50i-a64-mmc" },
+ 	{ .compatible = "allwinner,sun50i-a64-emmc" },
+ 	{ .compatible = "allwinner,sun50i-h6-mmc" },
+ 	{ .compatible = "allwinner,sun50i-h6-emmc" },
++	{ .compatible = "allwinner,sun50i-h616-mmc" },
++	{ .compatible = "allwinner,sun50i-h616-emmc" },
++	{ .compatible = "allwinner,sun50i-t507-mmc" },
++	{ .compatible = "allwinner,sun50i-t507-emmc" },
+ 	{ .compatible = "allwinner,sun50i-a100-mmc" },
+ 	{ .compatible = "allwinner,sun50i-a100-emmc" },
+ 	{ /* sentinel */ }
+ };
+ 

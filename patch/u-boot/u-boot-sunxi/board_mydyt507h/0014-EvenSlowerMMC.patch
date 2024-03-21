@@ -1,0 +1,89 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: John Doe <john.doe@somewhere.on.planet>
+Date: Thu, 21 Mar 2024 14:48:00 +0800
+Subject: Slow down MMC
+
+Signed-off-by: John Doe <john.doe@somewhere.on.planet>
+---
+ drivers/mmc/mmc-uclass.c |  1 +
+ drivers/mmc/mmc.c        | 13 ++++++----
+ drivers/mmc/sunxi_mmc.c  |  2 ++
+ 3 files changed, 11 insertions(+), 5 deletions(-)
+
+diff --git a/drivers/mmc/mmc-uclass.c b/drivers/mmc/mmc-uclass.c
+index 328456831d..eb80007017 100644
+--- a/drivers/mmc/mmc-uclass.c
++++ b/drivers/mmc/mmc-uclass.c
+@@ -225,10 +225,11 @@ int mmc_of_parse(struct udevice *dev, struct mmc_config *cfg)
+ 		return -EINVAL;
+ 	}
+ 
+ 	/* f_max is obtained from the optional "max-frequency" property */
+ 	dev_read_u32(dev, "max-frequency", &cfg->f_max);
++	if (cfg->f_max > 12000000) cfg->f_max = 12000000;
+ 
+ 	if (dev_read_bool(dev, "cap-sd-highspeed"))
+ 		cfg->host_caps |= MMC_CAP(SD_HS);
+ 	if (dev_read_bool(dev, "cap-mmc-highspeed"))
+ 		cfg->host_caps |= MMC_CAP(MMC_HS) | MMC_CAP(MMC_HS_52);
+diff --git a/drivers/mmc/mmc.c b/drivers/mmc/mmc.c
+index d96db7a0f8..5bc89521ef 100644
+--- a/drivers/mmc/mmc.c
++++ b/drivers/mmc/mmc.c
+@@ -165,17 +165,17 @@ const char *mmc_mode_name(enum bus_mode mode)
+ static uint mmc_mode2freq(struct mmc *mmc, enum bus_mode mode)
+ {
+ 	static const int freqs[] = {
+ 	      [MMC_LEGACY]	= 25000000,
+ 	      [MMC_HS]		= 26000000,
+-	      [SD_HS]		= 50000000,
+-	      [MMC_HS_52]	= 52000000,
+-	      [MMC_DDR_52]	= 52000000,
++	      [SD_HS]		= 12000000,
++	      [MMC_HS_52]	= 12000000,
++	      [MMC_DDR_52]	= 12000000,
+ 	      [UHS_SDR12]	= 25000000,
+-	      [UHS_SDR25]	= 50000000,
++	      [UHS_SDR25]	= 12000000,
+ 	      [UHS_SDR50]	= 100000000,
+-	      [UHS_DDR50]	= 50000000,
++	      [UHS_DDR50]	= 12000000,
+ 	      [UHS_SDR104]	= 208000000,
+ 	      [MMC_HS_200]	= 200000000,
+ 	      [MMC_HS_400]	= 200000000,
+ 	      [MMC_HS_400_ES]	= 200000000,
+ 	};
+@@ -1643,10 +1643,13 @@ static int mmc_host_power_cycle(struct mmc *mmc)
+ #endif
+ 
+ int mmc_set_clock(struct mmc *mmc, uint clock, bool disable)
+ {
+ 	if (!disable) {
++		if (clock > 12000000)
++			clock = 12000000;
++
+ 		if (clock > mmc->cfg->f_max)
+ 			clock = mmc->cfg->f_max;
+ 
+ 		if (clock < mmc->cfg->f_min)
+ 			clock = mmc->cfg->f_min;
+diff --git a/drivers/mmc/sunxi_mmc.c b/drivers/mmc/sunxi_mmc.c
+index 4b6e1ffd2f..2883651e32 100644
+--- a/drivers/mmc/sunxi_mmc.c
++++ b/drivers/mmc/sunxi_mmc.c
+@@ -186,10 +186,12 @@ static int mmc_config_clock(struct sunxi_mmc_priv *priv, struct mmc *mmc)
+ 	rval &= ~SUNXI_MMC_CLK_ENABLE;
+ 	writel(rval, &priv->reg->clkcr);
+ 	if (mmc_update_clk(priv))
+ 		return -1;
+ 
++	if (mmc->clock > 12000000)
++		mmc->clock = 12000000;
+ 	/* Set mod_clk to new rate */
+ 	if (mmc_set_mod_clk(priv, mmc->clock))
+ 		return -1;
+ 
+ 	/* Clear internal divider */
+-- 
+Created with Armbian build tools https://github.com/armbian/build
+
