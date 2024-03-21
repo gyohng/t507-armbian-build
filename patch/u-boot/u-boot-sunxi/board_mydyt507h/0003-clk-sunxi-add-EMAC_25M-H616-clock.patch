@@ -1,0 +1,26 @@
+From d83133f77da23fd72ae72c639ebb5500f1647fa2 Mon Sep 17 00:00:00 2001
+From: Jernej Skrabec <jernej.skrabec@gmail.com>
+Date: Sun, 25 Feb 2024 10:37:46 +0100
+Subject: [PATCH 03/10] clk: sunxi: add EMAC_25M H616 clock
+
+Signed-off-by: Jernej Skrabec <jernej.skrabec@gmail.com>
+---
+ drivers/clk/sunxi/clk_h616.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/drivers/clk/sunxi/clk_h616.c b/drivers/clk/sunxi/clk_h616.c
+index 113dcff28515..082ced0275c5 100644
+--- a/drivers/clk/sunxi/clk_h616.c
++++ b/drivers/clk/sunxi/clk_h616.c
+@@ -47,6 +47,8 @@ static struct ccu_clk_gate h616_gates[] = {
+ 	[CLK_BUS_SPI0]		= GATE(0x96c, BIT(0)),
+ 	[CLK_BUS_SPI1]		= GATE(0x96c, BIT(1)),
+ 
++	[CLK_EMAC_25M]		= GATE(0x970, BIT(31) | BIT(30)),
++
+ 	[CLK_BUS_EMAC0]		= GATE(0x97c, BIT(0)),
+ 	[CLK_BUS_EMAC1]		= GATE(0x97c, BIT(1)),
+ 
+-- 
+2.44.0
+

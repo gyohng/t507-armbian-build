@@ -1,0 +1,269 @@
+From fc134fb19a2dc8e476c47d4c536ab72d7fb559c3 Mon Sep 17 00:00:00 2001
+From: Jernej Skrabec <jernej.skrabec@gmail.com>
+Date: Sun, 25 Feb 2024 10:36:01 +0100
+Subject: [PATCH 02/10] power: pmic: sunxi: add AXP858 SPL driver
+
+Signed-off-by: Jernej Skrabec <jernej.skrabec@gmail.com>
+---
+ arch/arm/mach-sunxi/pmic_bus.c |   3 +
+ board/sunxi/board.c            |   6 +-
+ drivers/power/Kconfig          |  20 ++++--
+ drivers/power/Makefile         |   1 +
+ drivers/power/axp858.c         | 119 +++++++++++++++++++++++++++++++++
+ 5 files changed, 142 insertions(+), 7 deletions(-)
+ create mode 100644 drivers/power/axp858.c
+
+diff --git a/arch/arm/mach-sunxi/pmic_bus.c b/arch/arm/mach-sunxi/pmic_bus.c
+index 8e7625fe0571..ef3f2876421e 100644
+--- a/arch/arm/mach-sunxi/pmic_bus.c
++++ b/arch/arm/mach-sunxi/pmic_bus.c
+@@ -23,6 +23,7 @@
+ 
+ #define AXP305_I2C_ADDR			0x36
+ #define AXP313_I2C_ADDR			0x36
++#define AXP858_I2C_ADDR			0x36
+ 
+ #define AXP221_CHIP_ADDR		0x68
+ 
+@@ -37,6 +38,8 @@ static int pmic_i2c_address(void)
+ 		return AXP305_I2C_ADDR;
+ 	if (IS_ENABLED(CONFIG_AXP313_POWER))
+ 		return AXP313_I2C_ADDR;
++	if (IS_ENABLED(CONFIG_AXP858_POWER))
++		return AXP858_I2C_ADDR;
+ 
+ 	/* Other AXP2xx and AXP8xx variants */
+ 	return AXP209_I2C_ADDR;
+diff --git a/board/sunxi/board.c b/board/sunxi/board.c
+index 8c12c8deade3..9e4a108d7d66 100644
+--- a/board/sunxi/board.c
++++ b/board/sunxi/board.c
+@@ -570,7 +570,7 @@ void sunxi_board_init(void)
+ #if defined CONFIG_AXP152_POWER || defined CONFIG_AXP209_POWER || \
+ 	defined CONFIG_AXP221_POWER || defined CONFIG_AXP305_POWER || \
+ 	defined CONFIG_AXP809_POWER || defined CONFIG_AXP818_POWER || \
+-	defined CONFIG_AXP313_POWER
++	defined CONFIG_AXP313_POWER || defined CONFIG_AXP858_POWER
+ 	power_failed = axp_init();
+ 
+ 	if (IS_ENABLED(CONFIG_AXP_DISABLE_BOOT_ON_POWERON) && !power_failed) {
+@@ -585,7 +585,6 @@ void sunxi_board_init(void)
+ 
+ #ifdef CONFIG_AXP_DCDC1_VOLT
+ 	power_failed |= axp_set_dcdc1(CONFIG_AXP_DCDC1_VOLT);
+-	power_failed |= axp_set_dcdc5(CONFIG_AXP_DCDC5_VOLT);
+ #endif
+ #ifdef CONFIG_AXP_DCDC2_VOLT
+ 	power_failed |= axp_set_dcdc2(CONFIG_AXP_DCDC2_VOLT);
+@@ -594,6 +593,9 @@ void sunxi_board_init(void)
+ #ifdef CONFIG_AXP_DCDC4_VOLT
+ 	power_failed |= axp_set_dcdc4(CONFIG_AXP_DCDC4_VOLT);
+ #endif
++#ifdef CONFIG_AXP_DCDC5_VOLT
++	power_failed |= axp_set_dcdc5(CONFIG_AXP_DCDC5_VOLT);
++#endif
+ 
+ #ifdef CONFIG_AXP_ALDO1_VOLT
+ 	power_failed |= axp_set_aldo1(CONFIG_AXP_ALDO1_VOLT);
+diff --git a/drivers/power/Kconfig b/drivers/power/Kconfig
+index 33b8bc1214d2..efacc0979429 100644
+--- a/drivers/power/Kconfig
++++ b/drivers/power/Kconfig
+@@ -126,6 +126,15 @@ config AXP818_POWER
+ 	Say y here to enable support for the axp818 pmic found on
+ 	A83T dev board.
+ 
++config AXP858_POWER
++	bool "axp858 pmic support"
++	depends on MACH_SUN50I_H616
++	select AXP_PMIC_BUS
++	select CMD_POWEROFF
++	---help---
++	Say y here to enable support for the axp858 pmic found on
++	T507 boards.
++
+ config SY8106A_POWER
+ 	bool "SY8106A pmic support"
+ 	depends on MACH_SUNXI_H3_H5
+@@ -151,12 +160,12 @@ config AXP_DCDC1_VOLT
+ 
+ config AXP_DCDC2_VOLT
+ 	int "axp pmic dcdc2 voltage"
+-	depends on AXP152_POWER || AXP209_POWER || AXP221_POWER || AXP809_POWER || AXP818_POWER || AXP313_POWER
++	depends on AXP152_POWER || AXP209_POWER || AXP221_POWER || AXP809_POWER || AXP818_POWER || AXP313_POWER || AXP858_POWER
+ 	default 900 if AXP818_POWER
+ 	default 1400 if AXP152_POWER || AXP209_POWER
+ 	default 1000 if AXP313_POWER
+ 	default 1200 if MACH_SUN6I
+-	default 1100 if MACH_SUN8I
++	default 1100 if MACH_SUN8I || AXP858_POWER
+ 	default 0 if MACH_SUN9I
+ 	---help---
+ 	Set the voltage (mV) to program the axp pmic dcdc2 at, set to 0 to
+@@ -171,13 +180,14 @@ config AXP_DCDC2_VOLT
+ 
+ config AXP_DCDC3_VOLT
+ 	int "axp pmic dcdc3 voltage"
+-	depends on AXP152_POWER || AXP209_POWER || AXP221_POWER || AXP809_POWER || AXP818_POWER || AXP313_POWER
++	depends on AXP152_POWER || AXP209_POWER || AXP221_POWER || AXP809_POWER || AXP818_POWER || AXP313_POWER || AXP858_POWER
+ 	default 900 if AXP809_POWER || AXP818_POWER
+ 	default 1500 if AXP152_POWER
+ 	default 1250 if AXP209_POWER
+ 	default 1100 if AXP313_POWER
+ 	default 1100 if MACH_SUN8I_R40
+ 	default 1200 if MACH_SUN6I || MACH_SUN8I
++	default 940 if AXP858_POWER
+ 	---help---
+ 	Set the voltage (mV) to program the axp pmic dcdc3 at, set to 0 to
+ 	disable dcdc3.
+@@ -210,8 +220,8 @@ config AXP_DCDC4_VOLT
+ 
+ config AXP_DCDC5_VOLT
+ 	int "axp pmic dcdc5 voltage"
+-	depends on AXP221_POWER || AXP809_POWER || AXP818_POWER
+-	default 1500 if MACH_SUN6I || MACH_SUN8I || MACH_SUN9I
++	depends on AXP221_POWER || AXP809_POWER || AXP818_POWER || AXP858_POWER
++	default 1500 if MACH_SUN6I || MACH_SUN8I || MACH_SUN9I || AXP858_POWER
+ 	---help---
+ 	Set the voltage (mV) to program the axp pmic dcdc5 at, set to 0 to
+ 	disable dcdc5.
+diff --git a/drivers/power/Makefile b/drivers/power/Makefile
+index c7ee4595fc8f..a5cedb5e1b6d 100644
+--- a/drivers/power/Makefile
++++ b/drivers/power/Makefile
+@@ -15,6 +15,7 @@ obj-$(CONFIG_AXP305_POWER)	+= axp305.o
+ obj-$(CONFIG_AXP313_POWER)	+= axp313.o
+ obj-$(CONFIG_AXP809_POWER)	+= axp809.o
+ obj-$(CONFIG_AXP818_POWER)	+= axp818.o
++obj-$(CONFIG_AXP858_POWER)	+= axp858.o
+ obj-$(CONFIG_EXYNOS_TMU)	+= exynos-tmu.o
+ obj-$(CONFIG_SY8106A_POWER)	+= sy8106a.o
+ obj-$(CONFIG_TPS6586X_POWER)	+= tps6586x.o
+diff --git a/drivers/power/axp858.c b/drivers/power/axp858.c
+new file mode 100644
+index 000000000000..f45187d06e92
+--- /dev/null
++++ b/drivers/power/axp858.c
+@@ -0,0 +1,119 @@
++// SPDX-License-Identifier: GPL-2.0+
++/*
++ * AXP858 driver
++ *
++ * (C) Copyright 2024 Jernej Skrabec <jernej.skrabec@gmail.com>
++ */
++
++#include <common.h>
++#include <command.h>
++#include <errno.h>
++#include <asm/arch/pmic_bus.h>
++#include <axp_pmic.h>
++
++enum axp858_reg {
++	AXP858_CHIP_VERSION	= 0x03,
++	AXP858_OUTPUT_CTRL	= 0x10,
++	AXP858_DCDC1_CTRL	= 0x13,
++	AXP858_SHUTDOWN		= 0x32,
++};
++
++#define AXP858_CHIP_VERSION_MASK	0xcf
++#define AXP858_CHIP_VERSION_AXP858	0x44
++
++#define AXP858_POWEROFF			BIT(7)
++
++static u8 mvolt_to_cfg(int mvolt, int min, int max, int div)
++{
++	if (mvolt < min)
++		mvolt = min;
++	else if (mvolt > max)
++		mvolt = max;
++
++	return (mvolt - min) / div;
++}
++
++static int axp_set_dcdc(int dcdc_num, unsigned int mvolt)
++{
++	int ret;
++	u8 cfg, enable_mask = 1U << (dcdc_num - 1);
++	int volt_reg = AXP858_DCDC1_CTRL + dcdc_num - 1;
++
++	switch (dcdc_num) {
++	case 2:
++	case 3:
++		if (mvolt > 1200)
++			cfg = 71 + mvolt_to_cfg(mvolt, 1220, 1540, 20);
++		else
++			cfg = mvolt_to_cfg(mvolt, 500, 1200, 10);
++		break;
++	case 5:
++		if (mvolt > 1120)
++			cfg = 33 + mvolt_to_cfg(mvolt, 1140, 1840, 20);
++		else
++			cfg = mvolt_to_cfg(mvolt, 800, 1120, 10);
++		break;
++	default:
++		return -EINVAL;
++	}
++
++	if (mvolt == 0)
++		return pmic_bus_clrbits(AXP858_OUTPUT_CTRL, enable_mask);
++
++	debug("DCDC%d: writing 0x%x to reg 0x%x\n", dcdc_num, cfg, volt_reg);
++	ret = pmic_bus_write(volt_reg, cfg);
++	if (ret)
++		return ret;
++
++	return pmic_bus_setbits(AXP858_OUTPUT_CTRL, enable_mask);
++}
++
++int axp_set_dcdc2(unsigned int mvolt)
++{
++	return axp_set_dcdc(2, mvolt);
++}
++
++int axp_set_dcdc3(unsigned int mvolt)
++{
++	return axp_set_dcdc(3, mvolt);
++}
++
++int axp_set_dcdc5(unsigned int mvolt)
++{
++	return axp_set_dcdc(5, mvolt);
++}
++
++int axp_init(void)
++{
++	u8 axp_chip_id;
++	int ret;
++
++	ret = pmic_bus_init();
++	if (ret)
++		return ret;
++
++	ret = pmic_bus_read(AXP858_CHIP_VERSION, &axp_chip_id);
++	if (ret)
++		return ret;
++
++	axp_chip_id &= AXP858_CHIP_VERSION_MASK;
++	if (axp_chip_id != AXP858_CHIP_VERSION_AXP858) {
++		debug("unknown PMIC: 0x%x\n", axp_chip_id);
++		return -EINVAL;
++	}
++
++	return ret;
++}
++
++#if !CONFIG_IS_ENABLED(ARM_PSCI_FW) && !IS_ENABLED(CONFIG_SYSRESET_CMD_POWEROFF)
++int do_poweroff(struct cmd_tbl *cmdtp, int flag, int argc, char *const argv[])
++{
++	pmic_bus_write(AXP858_SHUTDOWN, AXP858_POWEROFF);
++
++	/* infinite loop during shutdown */
++	while (1) {}
++
++	/* not reached */
++	return 0;
++}
++#endif
+-- 
+2.44.0
+

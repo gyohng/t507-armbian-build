@@ -1,0 +1,110 @@
+From e3263baf91037b3be2ed2c2f9c7e63118a171679 Mon Sep 17 00:00:00 2001
+From: Jernej Skrabec <jernej.skrabec@gmail.com>
+Date: Wed, 6 Mar 2024 17:47:13 +0100
+Subject: [PATCH] Add support for AXP858
+
+Signed-off-by: Jernej Skrabec <jernej.skrabec@gmail.com>
+---
+ drivers/allwinner/axp/axp858.c           | 38 ++++++++++++++++++++++++
+ drivers/allwinner/axp/common.c           |  2 ++
+ include/drivers/allwinner/axp.h          |  1 +
+ plat/allwinner/sun50i_h616/platform.mk   |  2 +-
+ plat/allwinner/sun50i_h616/sunxi_power.c |  1 +
+ 5 files changed, 43 insertions(+), 1 deletion(-)
+ create mode 100644 drivers/allwinner/axp/axp858.c
+
+diff --git a/drivers/allwinner/axp/axp858.c b/drivers/allwinner/axp/axp858.c
+new file mode 100644
+index 000000000000..35ab702a49ab
+--- /dev/null
++++ b/drivers/allwinner/axp/axp858.c
+@@ -0,0 +1,38 @@
++/*
++ * Copyright (c) 2019, ARM Limited and Contributors. All rights reserved.
++ *
++ * SPDX-License-Identifier: BSD-3-Clause
++ */
++
++#include <drivers/allwinner/axp.h>
++
++const uint8_t axp_chip_id = AXP858_CHIP_ID;
++const char *const axp_compatible = "x-powers,axp858";
++
++#if SUNXI_SETUP_REGULATORS == 1
++const struct axp_regulator axp_regulators[] = {
++	{"dcdc1",   1500, 3400, 100, NA, 0x13, 0x10, 0},
++	{"dcdc2",    500, 1540,  10, 70, 0x14, 0x10, 1},
++	{"dcdc3",    500, 1540,  10, 70, 0x15, 0x10, 2},
++	{"dcdc4",    500, 1540,  10, 70, 0x16, 0x10, 3},
++	{"dcdc5",    800, 1840,  10, 32, 0x17, 0x10, 4},
++	{"dcdc6",   1500, 3400, 100, NA, 0x18, 0x10, 5},
++	{"aldo1",    700, 3300, 100, NA, 0x19, 0x11, 0},
++	{"aldo2",    700, 3300, 100, NA, 0x20, 0x11, 1},
++	{"aldo3",    700, 3300, 100, NA, 0x21, 0x11, 2},
++	{"aldo4",    700, 3300, 100, NA, 0x22, 0x11, 3},
++	{"aldo5",    700, 3300, 100, NA, 0x23, 0x11, 4},
++	{"bldo1",    700, 3300, 100, NA, 0x24, 0x11, 5},
++	{"bldo2",    700, 3300, 100, NA, 0x25, 0x11, 6},
++	{"bldo3",    700, 3300, 100, NA, 0x26, 0x11, 7},
++	{"bldo4",    700, 3300, 100, NA, 0x27, 0x12, 0},
++	{"bldo5",    700, 3300, 100, NA, 0x28, 0x12, 1},
++	{"cldo1",    700, 3300, 100, NA, 0x29, 0x12, 2},
++	{"cldo2",    700, 3300, 100, NA, 0x2a, 0x12, 3},
++	{"cldo3",    700, 3300, 100, NA, 0x2b, 0x12, 4},
++	{"cldo4",    700, 4200, 100, NA, 0x2d, 0x12, 5},
++	{"cpusldo",  700, 1400,  50, NA, 0x2e, 0x12, 6},
++	{"sw",        NA,   NA,  NA, NA,   NA, 0x12, 7},
++	{}
++};
++#endif
+diff --git a/drivers/allwinner/axp/common.c b/drivers/allwinner/axp/common.c
+index 79f908934404..8786df5911f9 100644
+--- a/drivers/allwinner/axp/common.c
++++ b/drivers/allwinner/axp/common.c
+@@ -198,6 +198,8 @@ void axp_setup_regulators(const void *fdt)
+ 			axp_setbits(0x12, BIT(7));
+ 		if (axp_chip_id == AXP805_CHIP_ID)
+ 			axp_setbits(0x11, BIT(7));
++		if (axp_chip_id == AXP858_CHIP_ID)
++			axp_setbits(0x12, BIT(7));
+ 	}
+ }
+ #endif	/* SUNXI_SETUP_REGULATORS */
+diff --git a/include/drivers/allwinner/axp.h b/include/drivers/allwinner/axp.h
+index 8b90c7f0c224..9447f25d21ff 100644
+--- a/include/drivers/allwinner/axp.h
++++ b/include/drivers/allwinner/axp.h
+@@ -18,6 +18,7 @@
+ enum {
+ 	AXP803_CHIP_ID = 0x41,
+ 	AXP805_CHIP_ID = 0x40,
++	AXP858_CHIP_ID = 0x44,
+ };
+ 
+ struct axp_regulator {
+diff --git a/plat/allwinner/sun50i_h616/platform.mk b/plat/allwinner/sun50i_h616/platform.mk
+index de494a2f4308..f479b5dfb744 100644
+--- a/plat/allwinner/sun50i_h616/platform.mk
++++ b/plat/allwinner/sun50i_h616/platform.mk
+@@ -18,5 +18,5 @@ ifeq (${SUNXI_PSCI_USE_SCPI}, 1)
+     $(error "H616 does not support SCPI PSCI ops")
+ endif
+ 
+-BL31_SOURCES		+=	drivers/allwinner/axp/axp805.c		\
++BL31_SOURCES		+=	drivers/allwinner/axp/axp858.c		\
+ 				drivers/allwinner/sunxi_rsb.c		\
+diff --git a/plat/allwinner/sun50i_h616/sunxi_power.c b/plat/allwinner/sun50i_h616/sunxi_power.c
+index dd6ebba9ad92..3fa6f58d7016 100644
+--- a/plat/allwinner/sun50i_h616/sunxi_power.c
++++ b/plat/allwinner/sun50i_h616/sunxi_power.c
+@@ -83,6 +83,7 @@ int sunxi_pmic_setup(uint16_t socid, const void *fdt)
+ 	}
+ 
+ 	pmic = AXP305;
++
+ 	axp_setup_regulators(fdt);
+ 
+ 	/* Switch the PMIC back to I2C mode. */
+-- 
+2.44.0
+

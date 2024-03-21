@@ -1,0 +1,58 @@
+From 7866ef81ac81fe8a27d83380ae7d58554b418a7c Mon Sep 17 00:00:00 2001
+From: Jernej Skrabec <jernej.skrabec@gmail.com>
+Date: Sun, 25 Feb 2024 10:38:57 +0100
+Subject: [PATCH 04/10] net: sun8i-emac: Add handling of PHY clock
+
+Signed-off-by: Jernej Skrabec <jernej.skrabec@gmail.com>
+---
+ drivers/net/sun8i_emac.c | 27 +++++++++++++++++++++++++++
+ 1 file changed, 27 insertions(+)
+
+diff --git a/drivers/net/sun8i_emac.c b/drivers/net/sun8i_emac.c
+index a12f7e32e8f2..3516c5d27c87 100644
+--- a/drivers/net/sun8i_emac.c
++++ b/drivers/net/sun8i_emac.c
+@@ -768,6 +768,29 @@ static int sun8i_handle_internal_phy(struct udevice *dev, struct emac_eth_dev *p
+ 	return 0;
+ }
+ 
++static int sun8i_handle_phy_clk(struct udevice *dev, struct emac_eth_dev *priv)
++{
++	struct ofnode_phandle_args phandle;
++	int ret;
++
++	ret = ofnode_parse_phandle_with_args(dev_ofnode(dev), "phy-handle",
++					     NULL, 0, 0, &phandle);
++	if (ret)
++		return ret;
++
++	if (!ofnode_device_is_compatible(phandle.node,
++					 "ethernet-phy-ieee802.3-c22"))
++		return 0;
++
++	ret = clk_get_by_index_nodev(phandle.node, 0, &priv->ephy_clk);
++	if (ret && ret != -ENOENT) {
++		dev_err(dev, "failed to get PHY clock\n");
++		return ret;
++	}
++
++	return 0;
++}
++
+ static int sun8i_emac_eth_of_to_plat(struct udevice *dev)
+ {
+ 	struct sun8i_eth_pdata *sun8i_pdata = dev_get_plat(dev);
+@@ -848,6 +871,10 @@ static int sun8i_emac_eth_of_to_plat(struct udevice *dev)
+ 		ret = sun8i_handle_internal_phy(dev, priv);
+ 		if (ret)
+ 			return ret;
++	} else {
++		ret = sun8i_handle_phy_clk(dev, priv);
++		if (ret)
++			return ret;
+ 	}
+ 
+ 	priv->interface = pdata->phy_interface;
+-- 
+2.44.0
+
