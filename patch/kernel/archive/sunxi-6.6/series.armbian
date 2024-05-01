@@ -232,3 +232,4 @@
 	patches.armbian/0031-phy-motorcomm-add-support-for-yt8112b-and-clock.patch
 	patches.armbian/0033-arm64-dts-allwinner-h616-add-myd-yt507h-board.patch
 	patches.armbian/0034-pinctrl-sunxi-h616-add-extra-gpio-banks.patch
+	patches.armbian/arm64-dts-sun50i-h618-add-overlay.patch
