@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: John Doe <john.doe@somewhere.on.planet>
+Date: Mon, 22 Apr 2024 00:04:22 +0000
+Subject: Changing USB to OTG and increasing the CPU voltage
+
+Signed-off-by: John Doe <john.doe@somewhere.on.planet>
+---
+ arch/arm64/boot/dts/allwinner/sun50i-t507-myd-yt507h.dts | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/allwinner/sun50i-t507-myd-yt507h.dts b/arch/arm64/boot/dts/allwinner/sun50i-t507-myd-yt507h.dts
+index 54eda870a..15a940216 100644
+--- a/arch/arm64/boot/dts/allwinner/sun50i-t507-myd-yt507h.dts
++++ b/arch/arm64/boot/dts/allwinner/sun50i-t507-myd-yt507h.dts
+@@ -350,11 +350,11 @@ reg_dcdc1: dcdc1 {
+ 				regulator-name = "vcc3v3-io-pa-pg-usb-sd-emmc";
+ 			};
+ 
+ 			reg_dcdc2: dcdc2 {
+ 				regulator-always-on;
+-				regulator-min-microvolt = <810000>;
++				regulator-min-microvolt = <1100000>;
+ 				regulator-max-microvolt = <1100000>;
+ 				regulator-name = "vdd-cpu";
+ 			};
+ 
+ 			reg_dcdc3: dcdc3 {
+@@ -416,14 +416,14 @@ &uart0 {
+ 	pinctrl-names = "default";
+ 	pinctrl-0 = <&uart0_ph_pins>;
+ 	status = "okay";
+ };
+ 
+-/*&usbotg {
++&usbotg {
+ 	dr_mode = "otg";
+ 	status = "okay";
+-};*/
++};
+ 
+ &usbphy {
+ 	status = "okay";
+ 	//usb0_id_det-gpios = <&pio 4 19 GPIO_ACTIVE_HIGH>;
+ 	//usb0_vbus_det-gpios = <&pio 4 18 GPIO_ACTIVE_HIGH>;
+-- 
+Created with Armbian build tools https://github.com/armbian/build
+

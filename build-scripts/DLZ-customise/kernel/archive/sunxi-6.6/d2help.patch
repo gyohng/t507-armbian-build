@@ -1,0 +1,245 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: John Doe <john.doe@somewhere.on.planet>
+Date: Sat, 27 Apr 2024 01:04:37 +0000
+Subject: including DMA helper
+
+Signed-off-by: John Doe <john.doe@somewhere.on.planet>
+---
+ drivers/gpu/drm/Makefile |   1 +
+ drivers/gpu/drm/d2help.c | 214 ++++++++++
+ 2 files changed, 215 insertions(+)
+
+diff --git a/drivers/gpu/drm/Makefile b/drivers/gpu/drm/Makefile
+index 215e78e79..2e06f8a92 100644
+--- a/drivers/gpu/drm/Makefile
++++ b/drivers/gpu/drm/Makefile
+@@ -196,5 +196,6 @@ obj-y			+= xlnx/
+ obj-y			+= gud/
+ obj-$(CONFIG_DRM_HYPERV) += hyperv/
+ obj-y			+= solomon/
+ obj-$(CONFIG_DRM_SPRD) += sprd/
+ obj-$(CONFIG_DRM_LOONGSON) += loongson/
++obj-m			+= d2help.o
+diff --git a/drivers/gpu/drm/d2help.c b/drivers/gpu/drm/d2help.c
+new file mode 100644
+index 000000000..159594339
+--- /dev/null
++++ b/drivers/gpu/drm/d2help.c
+@@ -0,0 +1,214 @@
++#include <linux/init.h>
++#include <linux/module.h>
++#include <linux/kernel.h>
++#include <linux/interrupt.h>
++#include <linux/fs.h>
++#include <linux/dmaengine.h>
++#include <linux/dma-mapping.h>
++#include <linux/random.h>
++#include <linux/slab.h>
++#include <linux/dma-map-ops.h>
++#include <linux/proc_fs.h>
++#include <linux/uaccess.h>
++#include <linux/io.h>
++#define DEVICE_BASE_ADDR 0x05097000
++
++struct virt_dma_chan {
++    struct dma_chan chan;
++    struct tasklet_struct task;
++    void (*desc_free)(void *);
++    spinlock_t lock;
++    struct list_head desc_allocated;
++    struct list_head desc_submitted;
++    struct list_head desc_issued;
++    struct list_head desc_completed;
++    struct list_head desc_terminated;
++    void *cyclic;
++};
++
++struct platformvchan {
++    struct virt_dma_chan vc;
++    struct list_head node;
++    struct dma_slave_config cfg;
++    void *phy;
++    u8 port;
++    u8 irq_type;
++    bool cyclic;
++};
++
++typedef struct {
++    bool valid;
++    size_t fs, nf, size;
++    void *data;
++    struct dma_chan *c;
++    dma_addr_t h;
++    struct dma_async_tx_descriptor *d;
++    struct dma_slave_config cfg;
++    dma_cookie_t cookie;
++    struct completion cf;
++    atomic_t toggle;
++} privateinfo_t;
++
++static void cbfunc(void *param) {
++    privateinfo_t *d = (privateinfo_t *)param;
++    atomic_set(&d->toggle, atomic_read(&d->toggle) ^ 1);
++    if (!completion_done(&d->cf))
++        complete(&d->cf);
++}
++
++bool privateinfo_enter(privateinfo_t *d, enum dma_transfer_direction td, size_t fs, int nf, phys_addr_t r, int p) {
++    dma_cap_mask_t m;
++    dma_cap_zero(m);
++    dma_cap_set(DMA_PRIVATE, m);
++    dma_cap_set(DMA_SLAVE, m);
++    dma_cap_set(DMA_CYCLIC, m);
++
++    if (!(d->c = dma_request_channel(m, NULL, NULL)) || IS_ERR(d->c)) {
++        pr_info("d2help: error\n");
++        memset(d, 0, sizeof(*d));
++        return false;
++    }
++
++    d->fs = fs;
++    d->nf = nf;
++    d->size = (fs * nf + PAGE_SIZE - 1) >> PAGE_SHIFT << PAGE_SHIFT;
++    if (!(d->data = dma_alloc_coherent(d->c->device->dev, d->size, &d->h, GFP_KERNEL)) || IS_ERR(d->data)) {
++        pr_info("d2help: error\n");
++        dma_release_channel(d->c);
++        memset(d, 0, sizeof(*d));
++        return false;
++    }
++
++    memset(d->data, 0, d->size);
++    memset(&d->cfg, 0, sizeof(d->cfg));
++
++    if (td) {
++        d->cfg.direction = DMA_MEM_TO_DEV;
++        d->cfg.src_addr_width = DMA_SLAVE_BUSWIDTH_4_BYTES;
++        d->cfg.src_addr = d->h;
++        d->cfg.src_maxburst = 16;
++        d->cfg.dst_addr_width = DMA_SLAVE_BUSWIDTH_4_BYTES;
++        d->cfg.dst_addr = r;
++        d->cfg.dst_maxburst = 16;
++        dmaengine_slave_config(d->c, &d->cfg);
++    } else {
++        d->cfg.direction = DMA_DEV_TO_MEM;
++        d->cfg.src_addr_width = DMA_SLAVE_BUSWIDTH_4_BYTES;
++        d->cfg.src_addr = r;
++        d->cfg.src_maxburst = 16;
++        d->cfg.dst_addr_width = DMA_SLAVE_BUSWIDTH_4_BYTES;
++        d->cfg.dst_addr = d->h;
++        d->cfg.dst_maxburst = 16;
++        dmaengine_slave_config(d->c, &d->cfg);
++    }
++
++    container_of(d->c, struct platformvchan, vc.chan)->port = p;
++    if (!(d->d = dmaengine_prep_dma_cyclic(d->c, d->h, fs * nf, fs, d->cfg.direction, DMA_PREP_INTERRUPT))
++        || IS_ERR(d->d)) {
++        pr_info("d2help: error\n");
++        dma_free_coherent(d->c->device->dev, d->size, d->data, d->h);
++        dma_release_channel(d->c);
++        memset(d, 0, sizeof(*d));
++        return false;
++    }
++
++    d->d->callback = cbfunc;
++    d->d->callback_param = (void *)d;
++    d->cookie = dmaengine_submit(d->d);
++    atomic_set(&d->toggle, 0);
++    init_completion(&d->cf);
++    dma_async_issue_pending(d->c);
++    d->valid = true;
++    return true;
++}
++
++static int dev_open(struct inode *inodep, struct file *filep) {
++    privateinfo_t *d = (privateinfo_t *)kmalloc(sizeof(privateinfo_t), GFP_KERNEL);
++    if (!d) return -ENOMEM;
++    memset(d, 0, sizeof(privateinfo_t));
++    filep->private_data = (void *)d;
++    return 0;
++}
++
++static int dev_mmap(struct file *filep, struct vm_area_struct *vma) {
++    privateinfo_t *d = (privateinfo_t *)filep->private_data;
++    if (!d || !d->valid || !d->data || !d->h) return -EINVAL;
++    if ((vma->vm_end - vma->vm_start) != d->size) return -EINVAL;
++    return dma_mmap_coherent(&d->c->dev->device, vma, d->data, d->h, vma->vm_end - vma->vm_start);
++}
++
++static ssize_t dev_read(struct file *filep, char __user *buffer, size_t len, loff_t *offset) {
++    privateinfo_t *d = (privateinfo_t *)filep->private_data;
++    if (!d || !d->valid) return -EINVAL;
++    if (len == sizeof(int)) {
++        int half;
++        wait_for_completion_interruptible(&d->cf);
++        half = atomic_read(&d->toggle) ^ 1;
++        if (copy_to_user(buffer, &half, sizeof(int))) {
++            return -EFAULT;
++        }
++        return sizeof(int);
++    }
++    return 0;
++}
++
++static ssize_t dev_write(struct file *filep, const char __user *buffer, size_t len, loff_t *offset) {
++    privateinfo_t *d = (privateinfo_t *)filep->private_data;
++    if (d->valid) return -EINVAL;
++
++    if (len == sizeof(int)*4) {
++        int p[4] = {0, 0, 0, 0};
++        if (copy_from_user(p, buffer, sizeof(int) * 4))
++            return -EFAULT;
++
++        if (p[0] != 0 && p[0] != 1) return -EINVAL;
++        if (p[1] <= 0 || p[1] >= 65536) return -EINVAL;
++        if (!privateinfo_enter(d, p[0], p[1], 2,p[2], p[3])) {
++            memset(d, 0, sizeof(privateinfo_t));
++            return -EIO;
++        }
++    }
++
++    return (ssize_t)len;
++}
++
++static int dev_release(struct inode *inodep, struct file *filep) {
++    privateinfo_t *d = (privateinfo_t *)filep->private_data;
++    if (d) {
++        if (d->valid) {
++            complete_all(&d->cf);
++            dmaengine_terminate_async(d->c);
++            dmaengine_synchronize(d->c);
++            memset(d->data, 0, d->size);
++            dma_free_coherent(d->c->device->dev, d->size, d->data, d->h);
++            dma_release_channel(d->c);
++        }
++        kfree(d);
++    }
++    return 0;
++}
++
++static struct proc_ops pfops = {
++    .proc_open = dev_open,
++    .proc_read = dev_read,
++    .proc_write = dev_write,
++    .proc_release = dev_release,
++    .proc_mmap = dev_mmap,
++};
++
++static void __iomem *base_addr;
++
++static int __init init(void) {
++    proc_create("d2help", 0660, NULL, &pfops);
++    pr_info("d2help init \n");
++    return 0;
++}
++
++static void __exit deinit(void) {
++    remove_proc_entry("d2help", NULL);
++    pr_info("d2help: exit\n");
++}
++
++MODULE_LICENSE("GPL v2");
++
++module_init(init);
+-- 
+Created with Armbian build tools https://github.com/armbian/build
+

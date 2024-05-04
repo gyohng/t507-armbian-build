@@ -10,6 +10,9 @@ export KBUILD_BUILD_TIMESTAMP='Wed Feb 14 10:52:52 CET 2024'
 export KBUILD_BUILD_USER=george
 export KBUILD_BUILD_HOST=george
 
+rm -rf userpatches
+ln -s ./build-scripts/DLZ-customise userpatches
+
 ./compile.sh $COMMAND \
 \
     BOARD=mydyt507h \
