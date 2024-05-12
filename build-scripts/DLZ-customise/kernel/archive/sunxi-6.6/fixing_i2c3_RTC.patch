@@ -1,0 +1,77 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: John Doe <john.doe@somewhere.on.planet>
+Date: Sun, 12 May 2024 14:46:16 +0000
+Subject: Fixing i2c3 for RTC
+
+Signed-off-by: John Doe <john.doe@somewhere.on.planet>
+---
+ arch/arm64/boot/dts/allwinner/sun50i-h616.dtsi           |  5 ++
+ arch/arm64/boot/dts/allwinner/sun50i-t507-myd-yt507h.dts | 28 ++++++++++
+ 2 files changed, 33 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/allwinner/sun50i-h616.dtsi b/arch/arm64/boot/dts/allwinner/sun50i-h616.dtsi
+index 5c0242f99231..651bca5a46d9 100644
+--- a/arch/arm64/boot/dts/allwinner/sun50i-h616.dtsi
++++ b/arch/arm64/boot/dts/allwinner/sun50i-h616.dtsi
+@@ -318,10 +318,15 @@ i2c0_pins: i2c0-pins {
+ 			i2c2_ph_pins: i2c2-ph-pins {
+ 				pins = "PH2", "PH3";
+ 				function = "i2c2";
+ 			};
+ 
++                        i2c3_pa_pins: i2c3-pa-pins {
++                                pins = "PA10", "PA11";
++                                function = "i2c3";
++                        };
++
+ 			i2c3_ph_pins: i2c3-ph-pins {
+ 				pins = "PH4", "PH5";
+ 				function = "i2c3";
+ 			};
+ 
+diff --git a/arch/arm64/boot/dts/allwinner/sun50i-t507-myd-yt507h.dts b/arch/arm64/boot/dts/allwinner/sun50i-t507-myd-yt507h.dts
+index 15a9402169b5..fbc5352e679d 100644
+--- a/arch/arm64/boot/dts/allwinner/sun50i-t507-myd-yt507h.dts
++++ b/arch/arm64/boot/dts/allwinner/sun50i-t507-myd-yt507h.dts
+@@ -147,10 +147,38 @@ &emac1 {
+ &gpu {
+ 	mali-supply = <&reg_dcdc4>;
+ 	status = "okay";
+ };
+ 
++&i2c3 {
++        pinctrl-names = "default";
++        pinctrl-0 = <&i2c3_pa_pins>;
++        clock-frequency = <100000>;
++        status = "okay";
++
++        rtc1@32 {
++		compatible = "epson,rx8025";
++		status = "okay";
++		reg = < 0x32 >;
++	};
++
++	eeprom@50 {
++		compatible = "atmel,24c32";
++		num-addresses = < 0x08 >;
++		pagesize = < 0x20 >;
++		reg = < 0x50 >;
++	};
++
++	gpio@20 {
++		compatible = "nxp,pca9555";
++		status = "okay";
++		interrupt-parent = < 0x45 >;
++		interrupts = < 0x07 0x0a 0x08 >;
++		reg = < 0x20 >;	
++	};
++};
++
+ &i2c4 {
+ 	pinctrl-names = "default";
+ 	pinctrl-0 = <&i2c4_ph_pins>;
+ 	clock-frequency = <200000>;
+ 	status = "okay";
+-- 
+Created with Armbian build tools https://github.com/armbian/build
+

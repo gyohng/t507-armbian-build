@@ -7,7 +7,7 @@ Signed-off-by: John Doe <john.doe@somewhere.on.planet>
 ---
  drivers/gpu/drm/Makefile |   1 +
  drivers/gpu/drm/d2help.c | 214 ++++++++++
- 2 files changed, 215 insertions(+)
+ 2 files changed, 217 insertions(+)
 
 diff --git a/drivers/gpu/drm/Makefile b/drivers/gpu/drm/Makefile
 index 215e78e79..2e06f8a92 100644
@@ -19,7 +19,7 @@ index 215e78e79..2e06f8a92 100644
  obj-y			+= solomon/
  obj-$(CONFIG_DRM_SPRD) += sprd/
  obj-$(CONFIG_DRM_LOONGSON) += loongson/
-+obj-m			+= d2help.o
++obj-y			+= d2help.o
 diff --git a/drivers/gpu/drm/d2help.c b/drivers/gpu/drm/d2help.c
 new file mode 100644
 index 000000000..159594339
@@ -228,7 +228,7 @@ index 000000000..159594339
 +
 +static int __init init(void) {
 +    proc_create("d2help", 0660, NULL, &pfops);
-+    pr_info("d2help init \n");
++    pr_info("d2help init \n");      
 +    return 0;
 +}
 +
